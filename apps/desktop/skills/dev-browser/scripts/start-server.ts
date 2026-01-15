@@ -31,8 +31,9 @@ mkdirSync(tmpDir, { recursive: true });
 mkdirSync(profileDir, { recursive: true });
 
 // Accomplish uses ports 9224/9225 to avoid conflicts with Claude Code's dev-browser (9222/9223)
-const ACCOMPLISH_HTTP_PORT = 9224;
-const ACCOMPLISH_CDP_PORT = 9225;
+// In multi-agent mode, read ports from environment variables
+const ACCOMPLISH_HTTP_PORT = parseInt(process.env.DEV_BROWSER_PORT || '9224', 10);
+const ACCOMPLISH_CDP_PORT = parseInt(process.env.DEV_BROWSER_CDP_PORT || '9225', 10);
 
 // Check if server is already running
 console.log("Checking for existing servers...");
