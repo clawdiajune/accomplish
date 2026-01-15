@@ -28,7 +28,7 @@ export default function ChooseModelType({ onSelect, currentModel }: ChooseModelT
           <div className="text-center">
             <div className="font-medium text-foreground">Cloud</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Use AI models from cloud providers
+              Anthropic, OpenAI, Gemini, xAI
             </div>
           </div>
         </button>
