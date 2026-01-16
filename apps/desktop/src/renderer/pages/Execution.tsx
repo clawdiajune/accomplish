@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { StreamingText } from '../components/ui/streaming-text';
 import { isWaitingForUser } from '../lib/waiting-detection';
+import { DebugPanel, type DebugLog } from '../components/DebugPanel';
 import loadingSymbol from '/assets/loading-symbol.svg';
 
 // Spinning Openwork icon component
@@ -74,6 +75,9 @@ export default function ExecutionPage() {
   const [taskRunCount, setTaskRunCount] = useState(0);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [currentToolInput, setCurrentToolInput] = useState<unknown>(null);
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
 
   const {
     currentTask,
@@ -153,13 +157,55 @@ export default function ExecutionPage() {
       }
     });
 
+    // Subscribe to debug logs (only receives events when debug mode is enabled in main process)
+    const unsubscribeDebugLog = accomplish.onDebugLog?.((log: unknown) => {
+      const debugLog = log as DebugLog;
+      // Only show logs for the current task
+      if (debugLog.taskId === id) {
+        setDebugLogs((prev) => [...prev, debugLog]);
+      }
+    });
+
     return () => {
       unsubscribeTask();
       unsubscribeTaskBatch?.();
       unsubscribePermission();
       unsubscribeStatusChange?.();
+      unsubscribeDebugLog?.();
     };
   }, [id, loadTaskById, addTaskUpdate, addTaskUpdateBatch, updateTaskStatus, setPermissionRequest, accomplish]);
+
+  // Fetch debug mode setting on mount and subscribe to changes
+  useEffect(() => {
+    // Initial fetch
+    accomplish.getDebugMode?.().then((enabled) => {
+      setDebugModeEnabled(enabled);
+      // Auto-open debug panel if debug mode is enabled
+      if (enabled) {
+        setDebugPanelOpen(true);
+      }
+    }).catch(console.error);
+
+    // Subscribe to debug mode changes (reactive updates from Settings)
+    const unsubscribeDebugMode = accomplish.onDebugModeChange?.((enabled) => {
+      setDebugModeEnabled(enabled);
+      // Auto-open panel when debug mode is enabled, close when disabled
+      if (enabled) {
+        setDebugPanelOpen(true);
+      } else {
+        setDebugPanelOpen(false);
+      }
+    });
+
+    return () => {
+      unsubscribeDebugMode?.();
+    };
+  }, [accomplish]);
+
+  // Clear debug logs when task changes
+  useEffect(() => {
+    setDebugLogs([]);
+  }, [id]);
 
   // Increment counter when task starts/resumes
   useEffect(() => {
@@ -693,6 +739,21 @@ export default function ExecutionPage() {
             Start New Task
           </Button>
         </div>
+      )}
+
+      {/* Debug Panel - only shown when debug mode is enabled */}
+      {debugModeEnabled && (
+        <DebugPanel
+          logs={debugLogs}
+          isOpen={debugPanelOpen}
+          onToggle={() => setDebugPanelOpen(!debugPanelOpen)}
+          onClear={() => setDebugLogs([])}
+          onSave={async () => {
+            const result = await accomplish.saveDebugLogs?.(debugLogs);
+            if (!result) throw new Error('saveDebugLogs not available');
+            return result;
+          }}
+        />
       )}
     </div>
   );

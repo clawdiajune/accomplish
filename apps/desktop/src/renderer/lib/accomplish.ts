@@ -90,6 +90,12 @@ interface AccomplishAPI {
   onDebugLog(callback: (log: unknown) => void): () => void;
   onTaskStatusChange?(callback: (data: { taskId: string; status: TaskStatus }) => void): () => void;
   onTaskSummary?(callback: (data: { taskId: string; summary: string }) => void): () => void;
+  onDebugModeChange?(callback: (enabled: boolean) => void): () => void;
+
+  // Debug logs
+  saveDebugLogs?(
+    logs: Array<{ taskId: string; timestamp: string; type: string; message: string; data?: unknown }>
+  ): Promise<{ success: boolean; filepath: string; filename: string }>;
 
   // Logging
   logEvent(payload: { level?: string; message: string; context?: Record<string, unknown> }): Promise<unknown>;

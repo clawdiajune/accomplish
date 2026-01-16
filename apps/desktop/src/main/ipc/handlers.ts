@@ -1,6 +1,8 @@
 import { ipcMain, BrowserWindow, shell, app } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { URL } from 'url';
+import fs from 'fs';
+import path from 'path';
 import {
   isOpenCodeCliInstalled,
   getOpenCodeCliVersion,
@@ -1026,11 +1028,19 @@ export function registerIPCHandlers(): void {
   });
 
   // Settings: Set debug mode setting
-  handle('settings:set-debug-mode', async (_event: IpcMainInvokeEvent, enabled: boolean) => {
+  handle('settings:set-debug-mode', async (event: IpcMainInvokeEvent, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       throw new Error('Invalid debug mode flag');
     }
     setDebugMode(enabled);
+
+    // Broadcast debug mode change to all windows
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('settings:debug-mode-changed', enabled);
+      }
+    }
   });
 
   // Settings: Get all app settings
@@ -1088,6 +1098,44 @@ export function registerIPCHandlers(): void {
     async (_event: IpcMainInvokeEvent, _payload: { level?: string; message?: string; context?: Record<string, unknown> }) => {
       // No-op: external logging removed
       return { ok: true };
+    }
+  );
+
+  // Save debug logs to file
+  handle(
+    'debug:save-logs',
+    async (
+      _event: IpcMainInvokeEvent,
+      logs: Array<{ taskId: string; timestamp: string; type: string; message: string; data?: unknown }>
+    ) => {
+      const logsDir = path.join(app.getPath('userData'), 'debug-logs');
+
+      // Ensure logs directory exists
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `debug-logs-${timestamp}.json`;
+      const filepath = path.join(logsDir, filename);
+
+      // Format logs for readability
+      const logContent = {
+        exportedAt: new Date().toISOString(),
+        totalEntries: logs.length,
+        logs: logs.map((log) => ({
+          ...log,
+          timestampFormatted: new Date(log.timestamp).toLocaleString(),
+        })),
+      };
+
+      // Write to file
+      fs.writeFileSync(filepath, JSON.stringify(logContent, null, 2), 'utf-8');
+
+      console.log('[Debug] Saved debug logs to:', filepath);
+
+      return { success: true, filepath, filename };
     }
   );
 }

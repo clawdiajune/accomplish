@@ -149,6 +149,18 @@ const accomplishAPI = {
     ipcRenderer.on('task:summary', listener);
     return () => ipcRenderer.removeListener('task:summary', listener);
   },
+  // Debug mode change notifications
+  onDebugModeChange: (callback: (enabled: boolean) => void) => {
+    const listener = (_: unknown, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('settings:debug-mode-changed', listener);
+    return () => ipcRenderer.removeListener('settings:debug-mode-changed', listener);
+  },
+
+  // Save debug logs to file
+  saveDebugLogs: (
+    logs: Array<{ taskId: string; timestamp: string; type: string; message: string; data?: unknown }>
+  ): Promise<{ success: boolean; filepath: string; filename: string }> =>
+    ipcRenderer.invoke('debug:save-logs', logs),
 
   logEvent: (payload: { level?: string; message: string; context?: Record<string, unknown> }) =>
     ipcRenderer.invoke('log:event', payload),
