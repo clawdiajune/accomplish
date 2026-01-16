@@ -281,6 +281,7 @@ export function registerIPCHandlers(): void {
 
   // Task: Start a new task
   handle('task:start', async (event: IpcMainInvokeEvent, config: TaskConfig) => {
+    console.log('[IPC] task:start invoked');
     const window = assertTrustedWindow(BrowserWindow.fromWebContents(event.sender));
     const sender = event.sender;
     const validatedConfig = validateTaskConfig(config);
@@ -438,10 +439,12 @@ export function registerIPCHandlers(): void {
 
   // Task: Cancel current task (running or queued)
   handle('task:cancel', async (_event: IpcMainInvokeEvent, taskId?: string) => {
+    console.log('[IPC] task:cancel invoked', { taskId });
     if (!taskId) return;
 
     // Check if it's a queued task first
     if (taskManager.isTaskQueued(taskId)) {
+      console.log('[IPC] Cancelling queued task:', taskId);
       taskManager.cancelQueuedTask(taskId);
       updateTaskStatus(taskId, 'cancelled', new Date().toISOString());
       return;
@@ -449,6 +452,7 @@ export function registerIPCHandlers(): void {
 
     // Otherwise cancel the running task
     if (taskManager.hasActiveTask(taskId)) {
+      console.log('[IPC] Cancelling running task:', taskId);
       await taskManager.cancelTask(taskId);
       updateTaskStatus(taskId, 'cancelled', new Date().toISOString());
     }
@@ -456,6 +460,7 @@ export function registerIPCHandlers(): void {
 
   // Task: Interrupt current task (graceful Ctrl+C, doesn't kill process)
   handle('task:interrupt', async (_event: IpcMainInvokeEvent, taskId?: string) => {
+    console.log('[IPC] task:interrupt invoked', { taskId });
     if (!taskId) return;
 
     if (taskManager.hasActiveTask(taskId)) {
@@ -487,6 +492,7 @@ export function registerIPCHandlers(): void {
 
   // Permission: Respond to permission request
   handle('permission:respond', async (_event: IpcMainInvokeEvent, response: PermissionResponse) => {
+    console.log('[IPC] permission:respond invoked', { taskId: response.taskId, decision: response.decision });
     const parsedResponse = validate(permissionResponseSchema, response);
     const { taskId, decision, requestId } = parsedResponse;
 
@@ -1101,7 +1107,7 @@ export function registerIPCHandlers(): void {
     }
   );
 
-  // Save debug logs to file
+  // Save debug logs to file in NDJSON format (industry standard for structured logs)
   handle(
     'debug:save-logs',
     async (
@@ -1115,23 +1121,42 @@ export function registerIPCHandlers(): void {
         fs.mkdirSync(logsDir, { recursive: true });
       }
 
-      // Generate filename with timestamp
+      // Generate filename with timestamp - use .jsonl extension for NDJSON
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `debug-logs-${timestamp}.json`;
+      const taskId = logs.length > 0 ? logs[0].taskId : 'unknown';
+      const filename = `debug-${taskId}-${timestamp}.jsonl`;
       const filepath = path.join(logsDir, filename);
 
-      // Format logs for readability
-      const logContent = {
-        exportedAt: new Date().toISOString(),
-        totalEntries: logs.length,
-        logs: logs.map((log) => ({
-          ...log,
-          timestampFormatted: new Date(log.timestamp).toLocaleString(),
-        })),
+      // Map log types to standard log levels
+      const getLogLevel = (type: string): string => {
+        switch (type) {
+          case 'stderr':
+          case 'error':
+            return 'error';
+          case 'parse-warning':
+            return 'warn';
+          case 'exit':
+          case 'info':
+            return 'info';
+          default:
+            return 'debug';
+        }
       };
 
-      // Write to file
-      fs.writeFileSync(filepath, JSON.stringify(logContent, null, 2), 'utf-8');
+      // Write as NDJSON (one JSON object per line)
+      // Benefits: easy to grep, streamable, each line is valid JSON
+      const ndjsonLines = logs.map((log) =>
+        JSON.stringify({
+          timestamp: log.timestamp,
+          level: getLogLevel(log.type),
+          taskId: log.taskId,
+          type: log.type,
+          message: log.message,
+          ...(log.data !== undefined && { data: log.data }),
+        })
+      );
+
+      fs.writeFileSync(filepath, ndjsonLines.join('\n') + '\n', 'utf-8');
 
       console.log('[Debug] Saved debug logs to:', filepath);
 

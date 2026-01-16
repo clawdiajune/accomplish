@@ -104,6 +104,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.hasCompleted = false;
     this.wasInterrupted = false;
 
+    // Debug: Task initialization
+    this.emit('debug', {
+      type: 'info',
+      message: `Task initialized: ${taskId}`,
+      data: { taskId, prompt: config.prompt.substring(0, 100), hasSessionId: !!config.sessionId }
+    });
+
     // Generate OpenCode config file with MCP settings and agent
     console.log('[OpenCode CLI] Generating OpenCode config with MCP settings and agent...');
     const configPath = await generateOpenCodeConfig();
@@ -447,6 +454,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private handleMessage(message: OpenCodeMessage): void {
     console.log('[OpenCode Adapter] Handling message type:', message.type);
 
+    // Debug: Log every message received
+    this.emit('debug', {
+      type: 'info',
+      message: `Message received: ${message.type}`,
+      data: { messageType: message.type, sessionID: message.sessionID }
+    });
+
     switch (message.type) {
       // Step start event
       case 'step_start':
@@ -478,6 +492,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         const toolInput = message.part.input;
 
         console.log('[OpenCode Adapter] Tool call:', toolName);
+
+        // Debug: Tool call with input
+        this.emit('debug', {
+          type: 'info',
+          message: `Tool call: ${toolName}`,
+          data: { tool: toolName, input: toolInput }
+        });
 
         this.emit('tool-use', toolName, toolInput);
         this.emit('progress', {
@@ -524,6 +545,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
         console.log('[OpenCode Adapter] Tool use:', toolUseName, 'status:', toolUseStatus);
 
+        // Debug: Tool use with status
+        this.emit('debug', {
+          type: 'info',
+          message: `Tool use: ${toolUseName} (${toolUseStatus})`,
+          data: { tool: toolUseName, status: toolUseStatus, hasOutput: !!toolUseOutput }
+        });
+
         // Emit tool-use event for the call
         this.emit('tool-use', toolUseName, toolUseInput);
         this.emit('progress', {
@@ -551,16 +579,33 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
       // Step finish event
       case 'step_finish':
+        // Debug: Step finish with reason
+        this.emit('debug', {
+          type: 'info',
+          message: `Step finished: ${message.part.reason}`,
+          data: { reason: message.part.reason, sessionId: this.currentSessionId }
+        });
+
         // Only complete if reason is 'stop' or 'end_turn' (final completion)
         // 'tool_use' means there are more steps coming
         if (message.part.reason === 'stop' || message.part.reason === 'end_turn') {
           this.hasCompleted = true;
+          this.emit('debug', {
+            type: 'info',
+            message: 'Task completed successfully',
+            data: { status: 'success', sessionId: this.currentSessionId }
+          });
           this.emit('complete', {
             status: 'success',
             sessionId: this.currentSessionId || undefined,
           });
         } else if (message.part.reason === 'error') {
           this.hasCompleted = true;
+          this.emit('debug', {
+            type: 'error',
+            message: 'Task failed with error',
+            data: { status: 'error', sessionId: this.currentSessionId }
+          });
           this.emit('complete', {
             status: 'error',
             sessionId: this.currentSessionId || undefined,
@@ -573,6 +618,11 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       // Error event
       case 'error':
         this.hasCompleted = true;
+        this.emit('debug', {
+          type: 'error',
+          message: `Error event received: ${message.error}`,
+          data: { error: message.error, sessionId: this.currentSessionId }
+        });
         this.emit('complete', {
           status: 'error',
           sessionId: this.currentSessionId || undefined,
@@ -604,27 +654,60 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       createdAt: new Date().toISOString(),
     };
 
+    // Debug: Permission/question request
+    this.emit('debug', {
+      type: 'info',
+      message: `Permission request: ${question.question.substring(0, 50)}...`,
+      data: {
+        requestId: permissionRequest.id,
+        question: question.question,
+        optionCount: question.options?.length || 0
+      }
+    });
+
     this.emit('permission-request', permissionRequest);
   }
 
   private handleProcessExit(code: number | null): void {
+    // Debug: Process exit handling
+    this.emit('debug', {
+      type: 'info',
+      message: `Process exit handler: code=${code}, hasCompleted=${this.hasCompleted}, wasInterrupted=${this.wasInterrupted}`,
+      data: { exitCode: code, hasCompleted: this.hasCompleted, wasInterrupted: this.wasInterrupted }
+    });
+
     // Only emit complete/error if we haven't already received a result message
     if (!this.hasCompleted) {
       if (this.wasInterrupted && code === 0) {
         // User interrupted the task - emit interrupted status so they can continue
         console.log('[OpenCode CLI] Task was interrupted by user');
+        this.emit('debug', {
+          type: 'info',
+          message: 'Task interrupted by user',
+          data: { status: 'interrupted', sessionId: this.currentSessionId }
+        });
         this.emit('complete', {
           status: 'interrupted',
           sessionId: this.currentSessionId || undefined,
         });
       } else if (code === 0) {
         // Normal exit without result message
+        this.emit('debug', {
+          type: 'info',
+          message: 'Task completed (process exit)',
+          data: { status: 'success', sessionId: this.currentSessionId }
+        });
         this.emit('complete', {
           status: 'success',
           sessionId: this.currentSessionId || undefined,
         });
       } else if (code !== null) {
         // Error exit
+        this.emit('debug', {
+          type: 'error',
+          message: `Process exited with error code: ${code}`,
+          data: { exitCode: code }
+        });
         this.emit('error', new Error(`OpenCode CLI exited with code ${code}`));
       }
     }
