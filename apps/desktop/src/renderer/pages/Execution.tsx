@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { StreamingText } from '../components/ui/streaming-text';
 import { isWaitingForUser } from '../lib/waiting-detection';
+import { ActivityRow, ThinkingRow } from '../components/execution';
 import loadingSymbol from '/assets/loading-symbol.svg';
 
 // Spinning Openwork icon component
@@ -443,12 +444,28 @@ export default function ExecutionPage() {
       {currentTask.status !== 'queued' && (
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="max-w-4xl mx-auto space-y-4">
-            {currentTask.messages
-              .filter((m) => !(m.type === 'tool' && m.toolName?.toLowerCase() === 'bash'))
-              .map((message, index, filteredMessages) => {
-              const isLastMessage = index === filteredMessages.length - 1;
-              const isLastAssistantMessage =
-                message.type === 'assistant' && isLastMessage;
+            {currentTask.messages.map((message, index, allMessages) => {
+              // Render tool messages as ActivityRow
+              if (message.type === 'tool') {
+                const isLastTool = !allMessages.slice(index + 1).some(m => m.type === 'tool');
+                return (
+                  <ActivityRow
+                    key={message.id}
+                    id={message.id}
+                    tool={message.toolName || 'unknown'}
+                    input={message.toolInput}
+                    output={message.content}
+                    status={isLastTool && currentTask.status === 'running' ? 'running' : 'complete'}
+                  />
+                );
+              }
+
+              // Render other messages as MessageBubble
+              const filteredMessages = allMessages.filter(m => m.type !== 'tool');
+              const filteredIndex = filteredMessages.findIndex(m => m.id === message.id);
+              const isLastMessage = filteredIndex === filteredMessages.length - 1;
+              const isLastAssistantMessage = message.type === 'assistant' && isLastMessage;
+
               // Find the last assistant message index for the continue button
               let lastAssistantIndex = -1;
               for (let i = filteredMessages.length - 1; i >= 0; i--) {
@@ -457,13 +474,15 @@ export default function ExecutionPage() {
                   break;
                 }
               }
-              const isLastAssistantForContinue = index === lastAssistantIndex;
+              const isLastAssistantForContinue = filteredIndex === lastAssistantIndex;
+
               // Show continue button on last assistant message when:
               // - Task was interrupted (user can always continue)
               // - Task completed AND the message indicates agent is waiting for user action
               const showContinue = isLastAssistantForContinue && !!hasSession &&
                 (currentTask.status === 'interrupted' ||
                  (currentTask.status === 'completed' && isWaitingForUser(message.content)));
+
               return (
                 <MessageBubble
                   key={message.id}
@@ -480,27 +499,8 @@ export default function ExecutionPage() {
             })}
 
             <AnimatePresence>
-              {currentTask.status === 'running' && !permissionRequest && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={springs.gentle}
-                  className="flex items-center gap-2 text-muted-foreground py-2"
-                  data-testid="execution-thinking-indicator"
-                >
-                  <SpinningIcon className="h-4 w-4" />
-                  <span className="text-sm">
-                    {currentTool
-                      ? ((currentToolInput as { description?: string })?.description || TOOL_PROGRESS_MAP[currentTool]?.label || currentTool)
-                      : 'Thinking...'}
-                  </span>
-                  {currentTool && !(currentToolInput as { description?: string })?.description && (
-                    <span className="text-xs text-muted-foreground/60">
-                      ({currentTool})
-                    </span>
-                  )}
-                </motion.div>
+              {currentTask.status === 'running' && !permissionRequest && !currentTool && (
+                <ThinkingRow />
               )}
             </AnimatePresence>
 
