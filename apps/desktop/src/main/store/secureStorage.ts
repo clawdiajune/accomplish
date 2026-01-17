@@ -184,21 +184,42 @@ export function deleteApiKey(provider: string): boolean {
 /**
  * Supported API key providers
  */
-export type ApiKeyProvider = 'anthropic' | 'openai' | 'google' | 'xai' | 'custom';
+export type ApiKeyProvider = 'anthropic' | 'openai' | 'google' | 'xai' | 'custom' | 'bedrock';
 
 /**
  * Get all API keys for all providers
  */
 export async function getAllApiKeys(): Promise<Record<ApiKeyProvider, string | null>> {
-  const [anthropic, openai, google, xai, custom] = await Promise.all([
+  const [anthropic, openai, google, xai, custom, bedrock] = await Promise.all([
     getApiKey('anthropic'),
     getApiKey('openai'),
     getApiKey('google'),
     getApiKey('xai'),
     getApiKey('custom'),
+    getApiKey('bedrock'),
   ]);
 
-  return { anthropic, openai, google, xai, custom };
+  return { anthropic, openai, google, xai, custom, bedrock };
+}
+
+/**
+ * Store Bedrock credentials (JSON stringified)
+ */
+export function storeBedrockCredentials(credentials: string): void {
+  storeApiKey('bedrock', credentials);
+}
+
+/**
+ * Get Bedrock credentials (returns parsed object or null)
+ */
+export function getBedrockCredentials(): Record<string, string> | null {
+  const stored = getApiKey('bedrock');
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
 }
 
 /**
