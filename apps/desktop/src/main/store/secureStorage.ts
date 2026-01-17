@@ -159,6 +159,9 @@ export function storeApiKey(provider: string, apiKey: string): void {
 export function getApiKey(provider: string): string | null {
   const store = getSecureStore();
   const values = store.get('values');
+  if (!values) {
+    return null;
+  }
   const encrypted = values[`apiKey:${provider}`];
   if (!encrypted) {
     return null;
