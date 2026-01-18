@@ -1152,6 +1152,56 @@ export function registerIPCHandlers(): void {
     console.log('[Ollama] Config saved:', config);
   });
 
+  // OpenRouter: Fetch available models
+  handle('openrouter:fetch-models', async (_event: IpcMainInvokeEvent) => {
+    const apiKey = getApiKey('openrouter');
+    if (!apiKey) {
+      return { success: false, error: 'No OpenRouter API key configured' };
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        'https://openrouter.ai/api/v1/models',
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+        },
+        API_KEY_VALIDATION_TIMEOUT_MS
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = (errorData as { error?: { message?: string } })?.error?.message || `API returned status ${response.status}`;
+        return { success: false, error: errorMessage };
+      }
+
+      const data = await response.json() as { data?: Array<{ id: string; name: string; context_length?: number }> };
+      const models = (data.data || []).map((m) => {
+        // Extract provider from model ID (e.g., "anthropic/claude-3.5-sonnet" -> "anthropic")
+        const provider = m.id.split('/')[0] || 'unknown';
+        return {
+          id: m.id,
+          name: m.name || m.id,
+          provider,
+          contextLength: m.context_length || 0,
+        };
+      });
+
+      console.log(`[OpenRouter] Fetched ${models.length} models`);
+      return { success: true, models };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch models';
+      console.warn('[OpenRouter] Fetch failed:', message);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { success: false, error: 'Request timed out. Check your internet connection.' };
+      }
+      return { success: false, error: `Failed to fetch models: ${message}` };
+    }
+  });
+
   // API Keys: Get all API keys (with masked values)
   handle('api-keys:all', async (_event: IpcMainInvokeEvent) => {
     const keys = await getAllApiKeys();
