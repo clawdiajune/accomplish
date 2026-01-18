@@ -2,7 +2,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { PERMISSION_API_PORT } from '../permission-api';
-import { getOllamaConfig } from '../store/appSettings';
+import { getOllamaConfig, getAzureFoundryConfig, getSelectedModel } from '../store/appSettings';
 import { getApiKey } from '../store/secureStorage';
 import type { BedrockCredentials } from '@accomplish/shared';
 
@@ -340,9 +340,13 @@ interface McpServerConfig {
   timeout?: number;
 }
 
-interface OllamaProviderModelConfig {
+interface ProviderModelConfig {
   name: string;
   tools?: boolean;
+  limit?: {
+    context?: number;
+    output?: number;
+  };
 }
 
 interface OllamaProviderConfig {
@@ -351,7 +355,7 @@ interface OllamaProviderConfig {
   options: {
     baseURL: string;
   };
-  models: Record<string, OllamaProviderModelConfig>;
+  models: Record<string, ProviderModelConfig>;
 }
 
 interface BedrockProviderConfig {
@@ -361,7 +365,19 @@ interface BedrockProviderConfig {
   };
 }
 
-type ProviderConfig = OllamaProviderConfig | BedrockProviderConfig;
+interface AzureFoundryProviderConfig {
+  npm: string;
+  name: string;
+  options: {
+    resourceName?: string;
+    baseURL?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+  };
+  models: Record<string, ProviderModelConfig>;
+}
+
+type ProviderConfig = OllamaProviderConfig | BedrockProviderConfig | AzureFoundryProviderConfig;
 
 interface OpenCodeConfig {
   $schema?: string;
@@ -378,8 +394,9 @@ interface OpenCodeConfig {
  * Generate OpenCode configuration file
  * OpenCode reads config from .opencode.json in the working directory or
  * from ~/.config/opencode/opencode.json
+ * @param azureFoundryToken - Optional Entra ID token for Azure Foundry authentication
  */
-export async function generateOpenCodeConfig(): Promise<string> {
+export async function generateOpenCodeConfig(azureFoundryToken?: string): Promise<string> {
   const configDir = path.join(app.getPath('userData'), 'opencode');
   const configPath = path.join(configDir, 'opencode.json');
 
@@ -397,19 +414,26 @@ export async function generateOpenCodeConfig(): Promise<string> {
   // Build file-permission MCP server command
   const filePermissionServerPath = path.join(skillsPath, 'file-permission', 'src', 'index.ts');
 
-  // Enable providers - add ollama if configured
+  // Enable providers - add ollama if configured, add azure-foundry if configured
   const ollamaConfig = getOllamaConfig();
+  const azureFoundryConfig = getAzureFoundryConfig();
+  const selectedModel = getSelectedModel();
   const baseProviders = ['anthropic', 'openai', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'amazon-bedrock'];
-  const enabledProviders = ollamaConfig?.enabled
-    ? [...baseProviders, 'ollama']
-    : baseProviders;
+  const enabledProviders = [...baseProviders];
+
+  if (ollamaConfig?.enabled) {
+    enabledProviders.push('ollama');
+  }
+  if (azureFoundryConfig?.enabled) {
+    enabledProviders.push('azure-foundry');
+  }
 
   // Build provider configurations
   const providerConfig: Record<string, ProviderConfig> = {};
 
   // Add Ollama provider configuration if enabled
   if (ollamaConfig?.enabled && ollamaConfig.models && ollamaConfig.models.length > 0) {
-    const ollamaModels: Record<string, OllamaProviderModelConfig> = {};
+    const ollamaModels: Record<string, ProviderModelConfig> = {};
     for (const model of ollamaConfig.models) {
       ollamaModels[model.id] = {
         name: model.displayName,
@@ -452,6 +476,64 @@ export async function generateOpenCodeConfig(): Promise<string> {
     } catch (e) {
       console.warn('[OpenCode Config] Failed to parse Bedrock credentials:', e);
     }
+  }
+
+  // Add Azure Foundry provider if configured
+  if (azureFoundryConfig?.enabled && selectedModel?.provider === 'azure-foundry') {
+    const deploymentName = azureFoundryConfig.deploymentName || selectedModel.deploymentName || 'default';
+
+    // Extract resource name from URL: https://<resource>.openai.azure.com -> <resource>
+    const baseUrl = azureFoundryConfig.baseUrl.replace(/\/$/, '');
+    const resourceMatch = baseUrl.match(/https?:\/\/([^.]+)\.openai\.azure\.com/i);
+    const resourceName = resourceMatch ? resourceMatch[1] : null;
+
+    // Build options for @ai-sdk/azure provider
+    const azureOptions: AzureFoundryProviderConfig['options'] = {};
+
+    if (resourceName) {
+      // Use resourceName for standard Azure OpenAI endpoints
+      azureOptions.resourceName = resourceName;
+    } else {
+      // Fall back to baseURL for custom endpoints
+      azureOptions.baseURL = baseUrl;
+    }
+
+    // Set authentication - either API key or Entra ID token via headers
+    if (azureFoundryConfig.authType === 'api-key') {
+      const azureFoundryApiKey = getApiKey('azure-foundry');
+      if (azureFoundryApiKey) {
+        azureOptions.apiKey = azureFoundryApiKey;
+      } else {
+        console.warn('[OpenCode Config] Azure Foundry API key missing from secure storage');
+      }
+    } else if (azureFoundryConfig.authType === 'entra-id' && azureFoundryToken) {
+      // For Entra ID auth, use the bearer token via the Authorization header.
+      // The SDK requires apiKey to be set for validation, so we use a placeholder.
+      // The Authorization header will override the api-key header for authentication.
+      azureOptions.apiKey = '';
+      azureOptions.headers = {
+        'Authorization': `Bearer ${azureFoundryToken}`,
+      };
+    }
+
+    providerConfig['azure-foundry'] = {
+      npm: '@ai-sdk/azure',
+      name: 'Azure Foundry',
+      options: azureOptions,
+      models: {
+        [deploymentName]: {
+          name: `Azure Foundry (${deploymentName})`,
+          tools: true,
+          // Set context/output limits suitable for Foundry models
+          limit: {
+            context: 128000,
+            output: 16384,
+          },
+        },
+      },
+    };
+
+    console.log('[OpenCode Config] Azure Foundry provider configured with resourceName:', resourceName, 'deployment:', deploymentName, 'authType:', azureFoundryConfig.authType);
   }
 
   const config: OpenCodeConfig = {

@@ -9,7 +9,7 @@ import {
   getBundledOpenCodeVersion,
 } from './cli-path';
 import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
-import { getSelectedModel } from '../store/appSettings';
+import { getSelectedModel, getAzureFoundryConfig } from '../store/appSettings';
 import { generateOpenCodeConfig, ACCOMPLISH_AGENT_NAME, syncApiKeysToOpenCodeAuth } from './config-generator';
 import { getExtendedNodePath } from '../utils/system-path';
 import { getBundledNodePaths, logBundledNodeInfo } from '../utils/bundled-node';
@@ -107,9 +107,31 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     // Sync API keys to OpenCode CLI's auth.json (for DeepSeek, Z.AI support)
     await syncApiKeysToOpenCodeAuth();
 
+    // For Azure Foundry with Entra ID auth, get the token first so we can include it in config
+    let azureFoundryToken: string | undefined;
+    const selectedModel = getSelectedModel();
+    const azureFoundryConfig = getAzureFoundryConfig();
+    if (selectedModel?.provider === 'azure-foundry' && azureFoundryConfig?.authType === 'entra-id') {
+      try {
+        const { DefaultAzureCredential } = await import('@azure/identity');
+        const credential = new DefaultAzureCredential();
+        const tokenResponse = await credential.getToken('https://cognitiveservices.azure.com/.default');
+        azureFoundryToken = tokenResponse.token;
+        console.log('[OpenCode CLI] Obtained Azure Entra ID token for config');
+      } catch (error) {
+        console.error('[OpenCode CLI] Failed to get Azure Entra ID token:', error);
+        const baseMessage =
+          'Failed to get Azure Entra ID token. Possible causes include not being logged into Azure (e.g., via "az login"), missing Azure CLI, insufficient Azure permissions, or network issues.';
+        if (error instanceof Error && error.message) {
+          throw new Error(`${baseMessage} Underlying error: ${error.message}`);
+        }
+        throw new Error(baseMessage);
+      }
+    }
+
     // Generate OpenCode config file with MCP settings and agent
     console.log('[OpenCode CLI] Generating OpenCode config with MCP settings and agent...');
-    const configPath = await generateOpenCodeConfig();
+    const configPath = await generateOpenCodeConfig(azureFoundryToken);
     console.log('[OpenCode CLI] Config generated at:', configPath);
 
     const cliArgs = await this.buildCliArgs(config);

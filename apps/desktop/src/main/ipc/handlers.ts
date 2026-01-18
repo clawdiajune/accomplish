@@ -40,6 +40,8 @@ import {
   setSelectedModel,
   getOllamaConfig,
   setOllamaConfig,
+  getAzureFoundryConfig,
+  setAzureFoundryConfig,
 } from '../store/appSettings';
 import { getDesktopConfig } from '../config';
 import {
@@ -57,6 +59,7 @@ import type {
   TaskStatus,
   SelectedModel,
   OllamaConfig,
+  AzureFoundryConfig,
 } from '@accomplish/shared';
 import { DEFAULT_PROVIDERS } from '@accomplish/shared';
 import {
@@ -76,7 +79,7 @@ import {
 } from '../test-utils/mock-task-flow';
 
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'xai', 'deepseek', 'zai', 'custom', 'bedrock']);
+const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'xai', 'deepseek', 'zai', 'azure-foundry', 'custom', 'bedrock']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
 interface OllamaModel {
@@ -659,7 +662,7 @@ export function registerIPCHandlers(): void {
   handle('settings:api-keys', async (_event: IpcMainInvokeEvent) => {
     const storedCredentials = await listStoredCredentials();
 
-    return storedCredentials
+    const keys = storedCredentials
       .filter((credential) => credential.account.startsWith('apiKey:'))
       .map((credential) => {
         const provider = credential.account.replace('apiKey:', '');
@@ -693,6 +696,24 @@ export function registerIPCHandlers(): void {
           createdAt: new Date().toISOString(),
         };
       });
+
+    // Check for Azure Foundry Entra ID configuration (stored in config, not keychain)
+    // Only add if not already present (checking for API key existence)
+    const azureConfig = getAzureFoundryConfig();
+    const hasAzureKey = keys.some((k) => k.provider === 'azure-foundry');
+
+    if (azureConfig && azureConfig.authType === 'entra-id' && !hasAzureKey) {
+      keys.push({
+        id: 'local-azure-foundry',
+        provider: 'azure-foundry',
+        label: 'Azure Foundry (Entra ID)',
+        keyPrefix: 'Entra ID',
+        isActive: azureConfig.enabled ?? true,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return keys;
   });
 
   // Settings: Add API key (stores securely in OS keychain)
@@ -791,11 +812,26 @@ export function registerIPCHandlers(): void {
   });
 
   // API Key: Validate API key for any provider
-  handle('api-key:validate-provider', async (_event: IpcMainInvokeEvent, provider: string, key: string) => {
+  handle('api-key:validate-provider', async (_event: IpcMainInvokeEvent, provider: string, key: string, options?: Record<string, any>) => {
     if (!ALLOWED_API_KEY_PROVIDERS.has(provider)) {
       return { valid: false, error: 'Unsupported provider' };
     }
-    const sanitizedKey = sanitizeString(key, 'apiKey', 256);
+
+    // Special handling for Azure Foundry with Entra ID - skip strict key validation
+    let sanitizedKey = '';
+    const isEntraId = provider === 'azure-foundry' && (
+      options?.authType === 'entra-id' || 
+      (!options && getAzureFoundryConfig()?.authType === 'entra-id')
+    );
+
+    if (!isEntraId) {
+      try {
+        sanitizedKey = sanitizeString(key, 'apiKey', 256);
+      } catch (e) {
+        return { valid: false, error: e instanceof Error ? e.message : 'Invalid API key' };
+      }
+    }
+
     console.log(`[API Key] Validation requested for provider: ${provider}`);
 
     try {
@@ -880,6 +916,70 @@ export function registerIPCHandlers(): void {
               headers: {
                 'Authorization': `Bearer ${sanitizedKey}`,
               },
+            },
+            API_KEY_VALIDATION_TIMEOUT_MS
+          );
+          break;
+
+        case 'azure-foundry':
+          // Prioritize options passed in (from settings dialog setup)
+          // otherwise fall back to stored config
+          const config = getAzureFoundryConfig();
+          const baseUrl = options?.baseUrl || config?.baseUrl;
+          const deploymentName = options?.deploymentName || config?.deploymentName;
+          const authType = options?.authType || config?.authType || 'api-key';
+
+          // Store token if using Entra ID to avoid double-fetch
+          let entraToken = '';
+
+          if (authType === 'entra-id') {
+             // If we have options, we should try to validate connection using Entra ID (setup mode)
+             if (options?.baseUrl && options?.deploymentName) {
+                 try {
+                     const { DefaultAzureCredential } = await import('@azure/identity');
+                     const credential = new DefaultAzureCredential();
+                     const tokenResponse = await credential.getToken('https://cognitiveservices.azure.com/.default');
+                     entraToken = tokenResponse.token;
+                 } catch (e) {
+                     return { valid: false, error: 'Failed to acquire Entra ID token: ' + (e instanceof Error ? e.message : String(e)) };
+                 }
+             } else {
+                 // No options means validating existing config which is entra-id (background check)
+                 // We skip actual validation here to avoid overhead
+                 return { valid: true };
+             }
+          }
+
+          if (!baseUrl || !deploymentName) {
+            console.log('[API Key] Skipping validation for azure-foundry provider (missing config or options)');
+            return { valid: true };
+          }
+
+          /* eslint-disable-next-line no-case-declarations */
+          const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+          /* eslint-disable-next-line no-case-declarations */
+          const testUrl = `${cleanBaseUrl}/openai/deployments/${deploymentName}/chat/completions?api-version=2023-05-15`;
+
+          /* eslint-disable-next-line no-case-declarations */
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+
+          if (authType === 'entra-id') {
+             headers['Authorization'] = `Bearer ${entraToken}`;
+          } else {
+             headers['api-key'] = sanitizedKey;
+          }
+
+          response = await fetchWithTimeout(
+            testUrl,
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                messages: [{ role: 'user', content: 'test' }],
+                max_tokens: 1
+              }),
             },
             API_KEY_VALIDATION_TIMEOUT_MS
           );
@@ -1137,6 +1237,41 @@ export function registerIPCHandlers(): void {
     }
     setOllamaConfig(config);
     console.log('[Ollama] Config saved:', config);
+  });
+
+  // Azure Foundry: Get config
+  handle('azure-foundry:get-config', async (_event: IpcMainInvokeEvent) => {
+    return getAzureFoundryConfig();
+  });
+
+  // Azure Foundry: Set config
+  handle('azure-foundry:set-config', async (_event: IpcMainInvokeEvent, config: AzureFoundryConfig | null) => {
+    if (config !== null) {
+      // Validate required fields
+      if (typeof config.baseUrl !== 'string' || !config.baseUrl.trim()) {
+        throw new Error('Invalid Azure Foundry configuration: baseUrl is required');
+      }
+      if (typeof config.deploymentName !== 'string' || !config.deploymentName.trim()) {
+        throw new Error('Invalid Azure Foundry configuration: deploymentName is required');
+      }
+      if (config.authType !== 'api-key' && config.authType !== 'entra-id') {
+        throw new Error('Invalid Azure Foundry configuration: authType must be api-key or entra-id');
+      }
+      if (typeof config.enabled !== 'boolean') {
+        throw new Error('Invalid Azure Foundry configuration: enabled must be a boolean');
+      }
+      // Validate URL format
+      try {
+        const parsed = new URL(config.baseUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('Invalid Azure Foundry configuration: Only http and https URLs are allowed');
+        }
+      } catch {
+        throw new Error('Invalid Azure Foundry configuration: Invalid base URL format');
+      }
+    }
+    setAzureFoundryConfig(config);
+    console.log('[Azure Foundry] Config saved:', config);
   });
 
   // API Keys: Get all API keys (with masked values)

@@ -116,12 +116,13 @@ export default function HomePage() {
   const handleSubmit = async () => {
     if (!prompt.trim() || isLoading) return;
 
-    // Check if user has any API key (Anthropic, OpenAI, Google, etc.) or Ollama configured before sending
+    // Check if user has any API key (Anthropic, OpenAI, Google, etc.) or Ollama/Azure Foundry configured before sending
     const hasKey = await accomplish.hasAnyApiKey();
     const selectedModel = await accomplish.getSelectedModel();
     const hasOllamaConfigured = selectedModel?.provider === 'ollama';
+    const hasAzureFoundryConfigured = selectedModel?.provider === 'azure-foundry';
 
-    if (!hasKey && !hasOllamaConfigured) {
+    if (!hasKey && !hasOllamaConfigured && !hasAzureFoundryConfigured) {
       setShowSettingsDialog(true);
       return;
     }

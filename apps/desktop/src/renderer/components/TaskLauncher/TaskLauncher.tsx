@@ -62,8 +62,9 @@ export default function TaskLauncher() {
         const hasKey = await accomplish.hasAnyApiKey();
         const selectedModel = await accomplish.getSelectedModel();
         const hasOllamaConfigured = selectedModel?.provider === 'ollama';
+        const hasAzureFoundryConfigured = selectedModel?.provider === 'azure-foundry';
 
-        if (!hasKey && !hasOllamaConfigured) {
+        if (!hasKey && !hasOllamaConfigured && !hasAzureFoundryConfigured) {
           closeLauncher();
           navigate('/');
           return;

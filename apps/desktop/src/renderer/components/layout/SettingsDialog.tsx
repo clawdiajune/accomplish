@@ -28,6 +28,7 @@ const API_KEY_PROVIDERS = [
   { id: 'xai', name: 'xAI (Grok)', prefix: 'xai-', placeholder: 'xai-...' },
   { id: 'deepseek', name: 'DeepSeek', prefix: 'sk-', placeholder: 'sk-...' },
   { id: 'zai', name: 'Z.AI Coding Plan', prefix: '', placeholder: 'Your Z.AI API key...' },
+  { id: 'azure-foundry', name: 'Azure AI Foundry', prefix: '', placeholder: '' },
   { id: 'bedrock', name: 'Amazon Bedrock', prefix: '', placeholder: '' },
 ] as const;
 
@@ -65,6 +66,14 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
   const [savingBedrock, setSavingBedrock] = useState(false);
   const [bedrockError, setBedrockError] = useState<string | null>(null);
   const [bedrockStatus, setBedrockStatus] = useState<string | null>(null);
+  // Azure Foundry state
+  const [azureFoundryUrl, setAzureFoundryUrl] = useState('');
+  const [azureFoundryDeployment, setAzureFoundryDeployment] = useState('');
+  const [azureFoundryApiKey, setAzureFoundryApiKey] = useState('');
+  const [azureFoundryAuthType, setAzureFoundryAuthType] = useState<'api-key' | 'entra-id'>('api-key');
+  const [azureFoundryError, setAzureFoundryError] = useState<string | null>(null);
+  const [savingAzureFoundry, setSavingAzureFoundry] = useState(false);
+  const [azureFoundryConfigured, setAzureFoundryConfigured] = useState(false);  // Track if Azure Foundry has a valid config
 
   useEffect(() => {
     if (!open) return;
@@ -150,12 +159,30 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
       }
     };
 
+    const fetchAzureFoundryConfig = async () => {
+      try {
+        const config = await accomplish.getAzureFoundryConfig();
+        if (config) {
+          setAzureFoundryUrl(config.baseUrl);
+          setAzureFoundryDeployment(config.deploymentName);
+          setAzureFoundryAuthType(config.authType);
+          // Mark as configured if previously enabled
+          if (config.enabled && config.deploymentName) {
+            setAzureFoundryConfigured(true);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch Azure Foundry config:', err);
+      }
+    };
+
     fetchKeys();
     fetchDebugSetting();
     fetchVersion();
     fetchSelectedModel();
     fetchOllamaConfig();
     fetchBedrockCredentials();
+    fetchAzureFoundryConfig();
   }, [open]);
 
   const handleDebugToggle = async () => {
@@ -173,6 +200,28 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
 
   const handleModelChange = async (fullId: string) => {
     const accomplish = getAccomplish();
+
+    // Check if this is an Azure Foundry model selection
+    if (fullId.startsWith('azure-foundry/')) {
+      const deploymentName = fullId.replace('azure-foundry/', '');
+      analytics.trackSelectModel(`Azure Foundry (${deploymentName})`);
+      const newSelection: SelectedModel = {
+        provider: 'azure-foundry',
+        model: fullId,
+        baseUrl: azureFoundryUrl,
+        deploymentName: deploymentName,
+      };
+      setModelStatusMessage(null);
+      try {
+        await accomplish.setSelectedModel(newSelection);
+        setSelectedModel(newSelection);
+        setModelStatusMessage(`Model updated to Azure Foundry (${deploymentName})`);
+      } catch (err) {
+        console.error('Failed to save model selection:', err);
+      }
+      return;
+    }
+
     const allModels = DEFAULT_PROVIDERS.flatMap((p) => p.models);
     const model = allModels.find((m) => m.fullId === fullId);
     if (model) {
@@ -245,6 +294,22 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
       await accomplish.removeApiKey(id);
       setSavedKeys((prev) => prev.filter((k) => k.id !== id));
       setStatusMessage(`${providerConfig?.name || providerName} API key removed.`);
+      
+      // If the removed provider was the selected model, clear the local selection
+      // so the dropdown shows it's no longer valid
+      if (selectedModel?.provider === providerName) {
+        setSelectedModel(null);
+      }
+      
+      // For Azure Foundry, also clear the config and form state
+      if (providerName === 'azure-foundry') {
+        await accomplish.setAzureFoundryConfig(null);
+        setAzureFoundryConfigured(false);
+        setAzureFoundryUrl('');
+        setAzureFoundryDeployment('');
+        setAzureFoundryApiKey('');
+        setModelStatusMessage(null);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to remove API key.';
       setError(message);
@@ -359,6 +424,83 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
     }
   };
 
+  const handleSaveAzureFoundry = async () => {
+    const accomplish = getAccomplish();
+    setSavingAzureFoundry(true);
+    setAzureFoundryError(null);
+
+    try {
+      // Validate connection first (like other providers validate API keys)
+      const result = await accomplish.validateApiKeyForProvider('azure-foundry', azureFoundryApiKey, {
+        baseUrl: azureFoundryUrl,
+        deploymentName: azureFoundryDeployment,
+        authType: azureFoundryAuthType
+      });
+
+      if (!result.valid) {
+        setAzureFoundryError(result.error || 'Connection validation failed');
+        setSavingAzureFoundry(false);
+        return;
+      }
+
+      // Save the API key only if using API key auth
+      if (azureFoundryAuthType === 'api-key') {
+        await accomplish.addApiKey('azure-foundry', azureFoundryApiKey);
+      }
+
+      // Save the Azure Foundry config
+      await accomplish.setAzureFoundryConfig({
+        baseUrl: azureFoundryUrl,
+        deploymentName: azureFoundryDeployment,
+        authType: azureFoundryAuthType,
+        enabled: true,
+        lastValidated: Date.now(),
+      });
+
+      // Set as selected model
+      await accomplish.setSelectedModel({
+        provider: 'azure-foundry',
+        model: `azure-foundry/${azureFoundryDeployment}`,
+        baseUrl: azureFoundryUrl,
+        deploymentName: azureFoundryDeployment,
+      });
+
+      setSelectedModel({
+        provider: 'azure-foundry',
+        model: `azure-foundry/${azureFoundryDeployment}`,
+        baseUrl: azureFoundryUrl,
+        deploymentName: azureFoundryDeployment,
+      });
+
+      // Add to saved keys list (for UI display purposes)
+      setSavedKeys((prev) => {
+        const filtered = prev.filter((k) => k.provider !== 'azure-foundry');
+        const azureFoundryKeyPrefix =
+          azureFoundryAuthType === 'api-key'
+            ? (azureFoundryApiKey ? `${azureFoundryApiKey.slice(0, 8)}...` : '(no key set)')
+            : 'Entra ID';
+        return [...filtered, {
+          id: 'local-azure-foundry',
+          provider: 'azure-foundry',
+          label: `Azure Foundry (${azureFoundryAuthType === 'entra-id' ? 'Entra ID' : 'API Key'})`,
+          keyPrefix: azureFoundryKeyPrefix,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        } as ApiKeyConfig];
+      });
+
+      // Mark Azure Foundry as configured so it appears in the model dropdown
+      setAzureFoundryConfigured(true);
+
+      setModelStatusMessage(`Model updated to Azure Foundry (${azureFoundryDeployment})`);
+      onApiKeySaved?.();
+    } catch (err) {
+      setAzureFoundryError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSavingAzureFoundry(false);
+    }
+  };
+
   const formatBytes = (bytes: number): string => {
     const gb = bytes / (1024 * 1024 * 1024);
     return `${gb.toFixed(1)} GB`;
@@ -431,12 +573,20 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                           </optgroup>
                         );
                       })}
+                      {/* Azure Foundry - shown when configured */}
+                      {azureFoundryConfigured && azureFoundryDeployment && (
+                        <optgroup label="Azure AI Foundry">
+                          <option value={`azure-foundry/${azureFoundryDeployment}`}>
+                            {azureFoundryDeployment}
+                          </option>
+                        </optgroup>
+                      )}
                     </select>
                   )}
                   {modelStatusMessage && (
                     <p className="mt-3 text-sm text-success">{modelStatusMessage}</p>
                   )}
-                  {selectedModel && selectedModel.provider !== 'ollama' && !savedKeys.some((k) => k.provider === selectedModel.provider) && (
+                  {selectedModel && selectedModel.provider !== 'ollama' && selectedModel.provider !== 'azure-foundry' && !savedKeys.some((k) => k.provider === selectedModel.provider) && (
                     <p className="mt-3 text-sm text-warning">
                       No API key configured for {DEFAULT_PROVIDERS.find((p) => p.id === selectedModel.provider)?.name}. Add one below.
                     </p>
@@ -699,8 +849,117 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                   </div>
                 )}
 
-                {/* API Key Input - hide for Bedrock */}
-                {provider !== 'bedrock' && (
+                {/* Azure Foundry Form */}
+                {provider === 'azure-foundry' && (
+                  <div className="mb-5">
+                    {/* Azure Foundry Endpoint */}
+                    <div className="mb-4">
+                      <label className="mb-2 block text-sm font-medium text-foreground">
+                        Azure OpenAI Endpoint
+                      </label>
+                      <input
+                        type="text"
+                        value={azureFoundryUrl}
+                        onChange={(e) => setAzureFoundryUrl(e.target.value)}
+                        placeholder="https://your-resource.openai.azure.com"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+
+                    {/* Deployment Name */}
+                    <div className="mb-4">
+                      <label className="mb-2 block text-sm font-medium text-foreground">
+                        Deployment Name
+                      </label>
+                      <input
+                        type="text"
+                        value={azureFoundryDeployment}
+                        onChange={(e) => setAzureFoundryDeployment(e.target.value)}
+                        placeholder="e.g., gpt-4o, gpt-5"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+
+                    {/* Authentication Type */}
+                    <div className="mb-4">
+                      <label className="mb-2 block text-sm font-medium text-foreground">
+                        Authentication
+                      </label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="azureAuthType"
+                            value="api-key"
+                            checked={azureFoundryAuthType === 'api-key'}
+                            onChange={() => setAzureFoundryAuthType('api-key')}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">API Key</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="azureAuthType"
+                            value="entra-id"
+                            checked={azureFoundryAuthType === 'entra-id'}
+                            onChange={() => setAzureFoundryAuthType('entra-id')}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">Entra ID (Azure CLI)</span>
+                        </label>
+                      </div>
+                      {azureFoundryAuthType === 'entra-id' && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Uses your Azure CLI credentials. Run <code className="bg-muted px-1 rounded">az login</code> first.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* API Key - only for API key auth */}
+                    {azureFoundryAuthType === 'api-key' && (
+                      <div className="mb-4">
+                        <label className="mb-2 block text-sm font-medium text-foreground">
+                          API Key
+                        </label>
+                        <input
+                          type="password"
+                          value={azureFoundryApiKey}
+                          onChange={(e) => setAzureFoundryApiKey(e.target.value)}
+                          placeholder="Enter your Azure API key"
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {/* Status messages */}
+                    {azureFoundryError && <p className="mb-4 text-sm text-destructive">{azureFoundryError}</p>}
+
+                    {/* Save button */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveAzureFoundry}
+                        disabled={savingAzureFoundry || !azureFoundryUrl || !azureFoundryDeployment || (azureFoundryAuthType === 'api-key' && !azureFoundryApiKey)}
+                        className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {savingAzureFoundry ? 'Saving...' : 'Save Foundry Credentials'}
+                      </button>
+                    </div>
+
+                    {/* Current selection indicator */}
+                    {azureFoundryConfigured && selectedModel?.provider === 'azure-foundry' && (
+                      <div className="mt-4 rounded-lg bg-muted p-3">
+                        <p className="text-sm text-foreground">
+                          <span className="font-medium">Currently using:</span>{' '}
+                          Azure Foundry ({selectedModel.deploymentName})
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* API Key Input - hide for Bedrock and Azure Foundry */}
+                {provider !== 'bedrock' && provider !== 'azure-foundry' && (
                   <div className="mb-5">
                     <label className="mb-2.5 block text-sm font-medium text-foreground">
                       {API_KEY_PROVIDERS.find((p) => p.id === provider)?.name} API Key
@@ -716,12 +975,12 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                   </div>
                 )}
 
-                {provider !== 'bedrock' && error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-                {provider !== 'bedrock' && statusMessage && (
+                {provider !== 'bedrock' && provider !== 'azure-foundry' && error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+                {provider !== 'bedrock' && provider !== 'azure-foundry' && statusMessage && (
                   <p className="mb-4 text-sm text-success">{statusMessage}</p>
                 )}
 
-                {provider !== 'bedrock' && (
+                {provider !== 'bedrock' && provider !== 'azure-foundry' && (
                   <button
                     className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                     onClick={handleSaveApiKey}

@@ -1,5 +1,5 @@
 import Store from 'electron-store';
-import type { SelectedModel, OllamaConfig } from '@accomplish/shared';
+import type { SelectedModel, OllamaConfig, AzureFoundryConfig } from '@accomplish/shared';
 
 /**
  * App settings schema
@@ -13,6 +13,8 @@ interface AppSettingsSchema {
   selectedModel: SelectedModel | null;
   /** Ollama server configuration */
   ollamaConfig: OllamaConfig | null;
+  /** Azure Foundry configuration */
+  azureFoundryConfig: AzureFoundryConfig | null;
 }
 
 const appSettingsStore = new Store<AppSettingsSchema>({
@@ -25,6 +27,7 @@ const appSettingsStore = new Store<AppSettingsSchema>({
       model: 'anthropic/claude-opus-4-5',
     },
     ollamaConfig: null,
+    azureFoundryConfig: null,
   },
 });
 
@@ -85,6 +88,20 @@ export function setOllamaConfig(config: OllamaConfig | null): void {
 }
 
 /**
+ * Get Azure Foundry configuration
+ */
+export function getAzureFoundryConfig(): AzureFoundryConfig | null {
+  return appSettingsStore.get('azureFoundryConfig');
+}
+
+/**
+ * Set Azure Foundry configuration
+ */
+export function setAzureFoundryConfig(config: AzureFoundryConfig | null): void {
+  appSettingsStore.set('azureFoundryConfig', config);
+}
+
+/**
  * Get all app settings
  */
 export function getAppSettings(): AppSettingsSchema {
@@ -93,6 +110,7 @@ export function getAppSettings(): AppSettingsSchema {
     onboardingComplete: appSettingsStore.get('onboardingComplete'),
     selectedModel: appSettingsStore.get('selectedModel'),
     ollamaConfig: appSettingsStore.get('ollamaConfig') ?? null,
+    azureFoundryConfig: appSettingsStore.get('azureFoundryConfig') ?? null,
   };
 }
 
