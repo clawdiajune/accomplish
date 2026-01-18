@@ -116,6 +116,8 @@ jobs:
 
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/workflows/release.yml"
 
+          REPO="${{ github.repository }}"
+
           # Build payload safely using jq to handle special characters in commit messages
           PAYLOAD=$(jq -n \
             --arg commit_count "$COMMIT_COUNT" \
@@ -125,6 +127,7 @@ jobs:
             --arg minor "$MINOR" \
             --arg major "$MAJOR" \
             --arg workflow_url "$WORKFLOW_URL" \
+            --arg repo "$REPO" \
             '{
               blocks: [
                 {
@@ -134,6 +137,11 @@ jobs:
                 {
                   type: "section",
                   text: { type: "mrkdwn", text: "*\($commit_count) commits since v\($current):*\n\n\($commits)" }
+                },
+                { type: "divider" },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: "*Quick release commands:*\n```🔧 Patch → \($patch)\ngh workflow run release.yml -R \($repo) -f bump_type=patch\n\n✨ Minor → \($minor)\ngh workflow run release.yml -R \($repo) -f bump_type=minor\n\n🚀 Major → \($major)\ngh workflow run release.yml -R \($repo) -f bump_type=major```" }
                 },
                 { type: "divider" },
                 {
