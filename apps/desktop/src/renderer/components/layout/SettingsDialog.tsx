@@ -48,6 +48,20 @@ const OPENROUTER_PROVIDER_PRIORITY = [
   'amazon',
 ];
 
+// Priority order for LiteLLM providers (lower index = higher priority)
+const LITELLM_PROVIDER_PRIORITY = [
+  'anthropic',
+  'openai',
+  'google',
+  'meta-llama',
+  'mistralai',
+  'x-ai',
+  'deepseek',
+  'cohere',
+  'perplexity',
+  'amazon',
+];
+
 export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState('');
   const [provider, setProvider] = useState<ProviderId>('anthropic');
