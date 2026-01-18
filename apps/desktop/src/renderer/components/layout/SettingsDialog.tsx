@@ -1053,11 +1053,6 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
                       placeholder={API_KEY_PROVIDERS.find((p) => p.id === provider)?.placeholder}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     />
-                    {provider === 'openrouter' && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Uses the OpenAI-compatible endpoint at <span className="font-mono">https://openrouter.ai/api/v1</span>. Select an OpenAI model below.
-                      </p>
-                    )}
                   </div>
                 )}
 
