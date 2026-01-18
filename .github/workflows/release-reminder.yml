@@ -92,6 +92,7 @@ jobs:
           echo "minor_version=$MINOR_VERSION" >> $GITHUB_OUTPUT
           echo "major_version=$MAJOR_VERSION" >> $GITHUB_OUTPUT
           echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
           # Store commits in a file (multiline handling)
           echo "$COMMITS" > /tmp/commits.txt
@@ -110,9 +111,11 @@ jobs:
           COMMITS=$(cat /tmp/commits.txt)
           COMMIT_COUNT="${{ steps.check.outputs.commit_count }}"
           CURRENT="${{ steps.format.outputs.current_version }}"
+          LATEST_TAG="${{ steps.format.outputs.latest_tag }}"
           PATCH="${{ steps.format.outputs.patch_version }}"
           MINOR="${{ steps.format.outputs.minor_version }}"
           MAJOR="${{ steps.format.outputs.major_version }}"
+          COMPARE_URL="https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...HEAD"
 
           # Build payload safely using jq to handle special characters in commit messages
           # Note: Buttons use action_id for interactive one-click releases via Cloudflare Worker
@@ -123,6 +126,7 @@ jobs:
             --arg patch "$PATCH" \
             --arg minor "$MINOR" \
             --arg major "$MAJOR" \
+            --arg compare_url "$COMPARE_URL" \
             '{
               blocks: [
                 {
@@ -131,7 +135,12 @@ jobs:
                 },
                 {
                   type: "section",
-                  text: { type: "mrkdwn", text: "*\($commit_count) commits since v\($current):*\n\n\($commits)" }
+                  text: { type: "mrkdwn", text: "*\($commit_count) commits since v\($current):*\n\n\($commits)" },
+                  accessory: {
+                    type: "button",
+                    text: { type: "plain_text", text: "View all commits", emoji: true },
+                    url: $compare_url
+                  }
                 },
                 { type: "divider" },
                 {

@@ -74,11 +74,26 @@ export default {
 
       // Success - return message to Slack
       const typeEmoji = { patch: '🔧', minor: '✨', major: '🚀' };
-      const userName = payload.user?.name || payload.user?.id || 'someone';
 
       return jsonResponse({
         response_type: 'in_channel',
-        text: `${typeEmoji[bumpType]} ${capitalize(bumpType)} release triggered by <@${payload.user.id}>! Building...`
+        replace_original: false,
+        text: `${typeEmoji[bumpType]} ${capitalize(bumpType)} release triggered by <@${payload.user.id}>! Building...`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `${typeEmoji[bumpType]} *${capitalize(bumpType)} release* triggered by <@${payload.user.id}>!\n\n_Building... this may take ~10 minutes._`
+            },
+            accessory: {
+              type: 'button',
+              text: { type: 'plain_text', text: 'View Build', emoji: true },
+              url: 'https://github.com/accomplish-ai/openwork/actions/workflows/release.yml',
+              style: 'primary'
+            }
+          }
+        ]
       });
 
     } catch (error) {
