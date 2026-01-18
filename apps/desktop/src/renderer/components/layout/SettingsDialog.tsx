@@ -227,10 +227,9 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
         const config = await accomplish.getLiteLLMConfig();
         if (config) {
           setLitellmUrl(config.baseUrl);
-          // Auto-test connection if previously configured
+          // Auto-reconnect if previously configured - uses stored API key from secure storage
           if (config.enabled) {
-            const apiKeys = await accomplish.getAllApiKeys();
-            const result = await accomplish.testLiteLLMConnection(config.baseUrl, apiKeys.litellm?.prefix);
+            const result = await accomplish.fetchLiteLLMModels();
             if (result.success && result.models) {
               setLitellmConnected(true);
               setLitellmModels(result.models);
