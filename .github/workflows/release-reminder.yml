@@ -100,11 +100,16 @@ jobs:
       - name: Send Slack notification
         if: steps.check.outputs.has_commits == 'true'
         env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: |
-          # Validate secret is configured
-          if [ -z "$SLACK_WEBHOOK" ]; then
-            echo "Error: SLACK_RELEASE_WEBHOOK_URL secret is not configured"
+          # Validate secrets are configured
+          if [ -z "$SLACK_BOT_TOKEN" ]; then
+            echo "Error: SLACK_BOT_TOKEN secret is not configured"
+            exit 1
+          fi
+          if [ -z "$SLACK_CHANNEL_ID" ]; then
+            echo "Error: SLACK_CHANNEL_ID secret is not configured"
             exit 1
           fi
 
@@ -117,9 +122,10 @@ jobs:
           MAJOR="${{ steps.format.outputs.major_version }}"
           COMPARE_URL="https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...HEAD"
 
-          # Build payload safely using jq to handle special characters in commit messages
-          # Note: Buttons use action_id for interactive one-click releases via Cloudflare Worker
+          # Build payload using Slack Web API (chat.postMessage)
+          # Bot token is required for interactive buttons to work properly
           PAYLOAD=$(jq -n \
+            --arg channel "$SLACK_CHANNEL_ID" \
             --arg commit_count "$COMMIT_COUNT" \
             --arg current "$CURRENT" \
             --arg commits "$COMMITS" \
@@ -128,6 +134,7 @@ jobs:
             --arg major "$MAJOR" \
             --arg compare_url "$COMPARE_URL" \
             '{
+              channel: $channel,
               blocks: [
                 {
                   type: "header",
@@ -155,7 +162,9 @@ jobs:
               ]
             }')
 
-          # Send to Slack with error handling
-          curl -f -X POST -H 'Content-type: application/json' \
+          # Send via Slack Web API (supports interactive buttons properly)
+          curl -f -X POST \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-type: application/json; charset=utf-8" \
             --data "$PAYLOAD" \
-            "$SLACK_WEBHOOK" || { echo "Failed to send Slack notification"; exit 1; }
+            "https://slack.com/api/chat.postMessage" || { echo "Failed to send Slack notification"; exit 1; }
