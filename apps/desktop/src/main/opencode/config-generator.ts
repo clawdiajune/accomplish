@@ -182,13 +182,10 @@ Browser automation using MCP tools. Use these tools directly for web automation 
 - Returns YAML with element refs like [ref=e5]
 - Use these refs with browser_click and browser_type
 
-**browser_click(position?, x?, y?, ref?, selector?, button?, click_count?, page_name?)** - Click on the page
-- position: "center" or "center-lower" (use center-lower for canvas apps to avoid overlays)
-- x, y: Pixel coordinates
-- ref: Element ref from browser_snapshot
-- selector: CSS selector
-- button: "left" (default), "right" (context menu), "middle"
-- click_count: 2 for double-click, 3 for triple-click
+**browser_click(x?, y?, ref?, selector?, page_name?)** - Click on the page
+- x, y: Pixel coordinates (default method)
+- ref: Element ref from browser_snapshot (alternative)
+- selector: CSS selector (alternative)
 
 **browser_type(ref?, selector?, text, press_enter?, page_name?)** - Type into an input
 - ref: Element ref from browser_snapshot (preferred)
@@ -206,60 +203,16 @@ Browser automation using MCP tools. Use these tools directly for web automation 
 **browser_pages(action, page_name?)** - Manage pages
 - action: "list" to see all pages, "close" to close a page
 
+**browser_keyboard(text?, key?, page_name?)** - Type to the focused element
+- text: Text to type (uses real keyboard events)
+- key: Special key like "Enter", "Tab", "Escape", or combos like "Control+a"
+- USE THIS for complex editors like Google Docs, Monaco, etc. that don't have simple input refs
+- Workflow: first click to focus the editor area, then use browser_keyboard to type
+
 **browser_sequence(actions, page_name?)** - Execute multiple actions efficiently
 - actions: Array of {action, ref?, selector?, x?, y?, text?, press_enter?, timeout?}
 - Supported actions: "click", "type", "snapshot", "screenshot", "wait"
 - Use for multi-step operations like form filling
-
-**browser_keyboard(action, key?, text?, page_name?)** - Keyboard input
-- action: "press" for key combos, "type" for raw text, "down"/"up" for hold/release
-- key: "Enter", "Tab", "Escape", "Meta+v", "Control+c", "Shift+ArrowDown"
-- text: Text to type character by character (for action="type")
-- Use for shortcuts, special keys, or typing into canvas apps like Google Docs
-
-**browser_scroll(direction?, amount?, ref?, selector?, position?, page_name?)** - Scroll page
-- direction + amount: Scroll by pixels (up/down/left/right, default 500px)
-- ref or selector: Scroll element into view
-- position: "top" or "bottom" to jump to page extremes
-
-**browser_hover(ref?, selector?, x?, y?, page_name?)** - Hover over element
-- Triggers hover states, dropdowns, and tooltips
-- Use before clicking nested menus
-
-**browser_select(ref?, selector?, value?, label?, index?, page_name?)** - Select dropdown option
-- For native <select> elements (browser_click won't work on these)
-- value: Select by option's value attribute
-- label: Select by visible text
-- index: Select by 0-based index
-
-**browser_wait(condition, selector?, timeout?, page_name?)** - Wait for condition
-- condition: "selector" (appear), "hidden" (disappear), "navigation", "network_idle", "timeout"
-- selector: CSS selector (required for selector/hidden conditions)
-- timeout: Max wait in ms (default 30000), or duration for "timeout" condition
-
-**browser_file_upload(ref?, selector?, files, page_name?)** - Upload files
-- files: Array of absolute file paths
-- Target element must be an input[type=file]
-
-**browser_drag(source_*, target_*, page_name?)** - Drag and drop
-- Source: source_ref, source_selector, or source_x/source_y
-- Target: target_ref, target_selector, or target_x/target_y
-
-**browser_get_text(ref?, selector?, page_name?)** - Get element text/value
-- Returns text content or input value
-- Faster than full snapshot when you just need one element
-
-**browser_iframe(action, ref?, selector?, page_name?)** - Handle iframes
-- action: "enter" to access iframe content, "exit" to return to main page
-- After entering, use browser_snapshot to see iframe content
-
-**browser_tabs(action, index?, timeout?, page_name?)** - Manage tabs/popups
-- action: "list" | "switch" | "close" | "wait_for_new"
-- Use "wait_for_new" before clicking links that open popups
-
-**browser_canvas_type(text, position?, page_name?)** - Type into canvas apps (Google Docs, Sheets, Figma)
-- Clicks in document, jumps to start, then types - all in one call
-- position: "start" (default) jumps to beginning, "current" types at cursor
 </tools>
 
 <workflow>
@@ -276,32 +229,20 @@ Browser automation using MCP tools. Use these tools directly for web automation 
 4. browser_screenshot() -> see search results
 </example>
 
-<canvas-apps>
-**IMPORTANT: Canvas-based apps require special handling**
+<example name="google-docs">
+**IMPORTANT**: For Google Docs/Sheets/Slides, ALWAYS navigate directly - don't click through Drive UI (new tabs don't work well):
+1. browser_navigate(url="docs.google.com/document/create") -> creates new doc directly
+2. browser_click(x=640, y=300) -> click on document area to focus the editor
+3. browser_keyboard(text="Hello, this is my document") -> type with real keyboard events
+4. browser_keyboard(key="Enter") -> press Enter for new line
+5. browser_keyboard(text="Second paragraph")
+6. browser_screenshot() -> verify text was typed
 
-Apps like Google Docs, Google Sheets, Figma, Canva, and Miro render content as canvas elements.
-The accessibility tree won't expose editable areas, and element refs often fail with timeout errors.
-
-**Google Workspace Direct URLs (ALWAYS use these instead of navigating menus):**
+Direct URLs to remember:
 - New Doc: docs.google.com/document/create
 - New Sheet: docs.google.com/spreadsheets/create
-- New Slides: docs.google.com/presentation/create
-- New Form: docs.google.com/forms/create
-
-**PREFERRED: Use browser_canvas_type for typing into canvas apps:**
-\`browser_canvas_type(text="your content")\` - Clicks, jumps to start, and types in one call
-
-<example name="create-doc-with-text">
-User: "Create a Google Doc with the text 'hello world'"
-1. browser_navigate(url="docs.google.com/document/create") -> Direct URL, skip Drive menus!
-2. browser_canvas_type(text="hello world") -> Clicks, jumps to doc start, types text
-3. browser_screenshot() -> verify text appeared and auto-saved
+- New Slide: docs.google.com/presentation/create
 </example>
-
-**Manual alternative (if you need more control):**
-1. \`browser_click(position="center-lower")\` to click content area
-2. \`browser_keyboard(action="type", text="...")\` to type
-</canvas-apps>
 
 <login-pages>
 When you encounter a login page (e.g., Google Sign-In, OAuth screens, authentication prompts):
@@ -336,7 +277,7 @@ See the ask-user-question skill for full documentation and examples.
 
 <behavior>
 - Use AskUserQuestion tool for clarifying questions before starting ambiguous tasks
-- Use MCP tools directly - browser_navigate, browser_snapshot, browser_click, browser_type, browser_keyboard, browser_screenshot, browser_scroll, browser_hover, browser_select, browser_wait, browser_file_upload, browser_drag, browser_get_text, browser_iframe, browser_tabs, browser_canvas_type, browser_sequence
+- Use MCP tools directly - browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, browser_sequence
 
 **BROWSER ACTION VERBOSITY - Be descriptive about web interactions:**
 - Before each browser action, briefly explain what you're about to do in user terms
@@ -661,22 +602,9 @@ export async function generateOpenCodeConfig(): Promise<string> {
       },
       'dev-browser-mcp': {
         type: 'local',
-        // Must cd to the skill directory first so npx tsx can find node_modules
-        // Use platform-specific shell: cmd on Windows, bash on Unix
-        command:
-          process.platform === 'win32'
-            ? [
-                'cmd',
-                '/c',
-                `cd /d "${path.join(skillsPath, 'dev-browser-mcp')}" && npx tsx src/index.ts`,
-              ]
-            : [
-                'bash',
-                '-c',
-                `cd "${path.join(skillsPath, 'dev-browser-mcp')}" && npx tsx src/index.ts`,
-              ],
+        command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
         enabled: true,
-        timeout: 30000, // Longer timeout for browser operations
+        timeout: 30000,  // Longer timeout for browser operations
       },
     },
   };

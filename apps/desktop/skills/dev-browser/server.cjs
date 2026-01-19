@@ -29,6 +29,7 @@ if (!fs.existsSync(nodeModulesPath)) {
     cwd: skillDir,
     stdio: 'inherit',
     shell: isWindows,
+    windowsHide: true,
   });
   if (result.error || result.status !== 0) {
     console.error('Failed to install dependencies');
@@ -49,6 +50,7 @@ const child = spawn(npxCommand, ['tsx', 'scripts/start-server.ts'], {
   stdio: 'inherit',
   env,
   shell: isWindows,
+  windowsHide: true,
 });
 
 child.on('error', (err) => {

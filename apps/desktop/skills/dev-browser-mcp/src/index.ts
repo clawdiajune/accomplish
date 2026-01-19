@@ -1125,6 +1125,12 @@ interface BrowserPagesInput {
   page_name?: string;
 }
 
+interface BrowserKeyboardInput {
+  text?: string;
+  key?: string;
+  page_name?: string;
+}
+
 interface SequenceAction {
   action: 'click' | 'type' | 'snapshot' | 'screenshot' | 'wait';
   ref?: string;
@@ -1392,6 +1398,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['action'],
+      },
+    },
+    {
+      name: 'browser_keyboard',
+      description: 'Type text or press keys on the currently focused element. Use this for complex editors like Google Docs that don\'t have simple input elements. First click to focus, then use this to type.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Text to type. Each character is typed with proper key events.',
+          },
+          key: {
+            type: 'string',
+            description: 'Special key to press (e.g., "Enter", "Tab", "Escape", "Backspace", "ArrowDown"). Can be combined with modifiers like "Control+a", "Shift+Enter".',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
       },
     },
     {
@@ -1759,6 +1786,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
   const { name, arguments: args } = request.params;
 
+  console.error(`[MCP] Tool called: ${name}`, JSON.stringify(args, null, 2));
+
   try {
     switch (name) {
       case 'browser_navigate': {
@@ -1778,12 +1807,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         const currentUrl = page.url();
         const viewport = page.viewportSize();
 
-        return {
+        const result = {
           content: [{
-            type: 'text',
-            text: `Navigated to ${currentUrl}\nTitle: ${title}\nViewport: ${viewport?.width || 1280}x${viewport?.height || 720}`,
+            type: 'text' as const,
+            text: `Navigation successful.
+URL: ${currentUrl}
+Title: ${title}
+Viewport: ${viewport?.width || 1280}x${viewport?.height || 720}
+
+The page has loaded. Use browser_snapshot() to see the page elements and find interactive refs, or browser_screenshot() to see what the page looks like visually.`,
           }],
+          isError: false,
         };
+        console.error(`[MCP] browser_navigate result:`, JSON.stringify(result, null, 2));
+        return result;
       }
 
       case 'browser_snapshot': {
@@ -2023,6 +2060,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         return {
           content: [{ type: 'text', text: `Error: Unknown action "${action}"` }],
           isError: true,
+        };
+      }
+
+      case 'browser_keyboard': {
+        const { text, key, page_name } = args as BrowserKeyboardInput;
+        const page = await getPage(page_name);
+
+        if (!text && !key) {
+          return {
+            content: [{ type: 'text', text: 'Error: Either text or key must be provided' }],
+            isError: true,
+          };
+        }
+
+        const results: string[] = [];
+
+        // Type text if provided
+        if (text) {
+          await page.keyboard.type(text, { delay: 50 }); // Small delay between characters for reliability
+          results.push(`Typed: "${text}"`);
+        }
+
+        // Press key if provided
+        if (key) {
+          await page.keyboard.press(key);
+          results.push(`Pressed: ${key}`);
+        }
+
+        return {
+          content: [{ type: 'text', text: results.join(', ') }],
         };
       }
 
