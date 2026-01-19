@@ -10,6 +10,7 @@ import { getAccomplish } from '../lib/accomplish';
 import { springs, staggerContainer, staggerItem } from '../lib/animations';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronDown } from 'lucide-react';
+import { hasAnyReadyProvider } from '@accomplish/shared';
 
 // Import use case images for proper bundling in production
 import calendarPrepNotesImg from '/assets/usecases/calendar-prep-notes.png';
@@ -116,13 +117,9 @@ export default function HomePage() {
   const handleSubmit = async () => {
     if (!prompt.trim() || isLoading) return;
 
-    // Check if user has any API key (Anthropic, OpenAI, Google, etc.) or local/proxy provider configured
-    const hasKey = await accomplish.hasAnyApiKey();
-    const selectedModel = await accomplish.getSelectedModel();
-    const hasOllamaConfigured = selectedModel?.provider === 'ollama';
-    const hasLiteLLMConfigured = selectedModel?.provider === 'litellm';
-
-    if (!hasKey && !hasOllamaConfigured && !hasLiteLLMConfigured) {
+    // Check if any provider is ready before sending
+    const settings = await accomplish.getProviderSettings();
+    if (!hasAnyReadyProvider(settings)) {
       setShowSettingsDialog(true);
       return;
     }
