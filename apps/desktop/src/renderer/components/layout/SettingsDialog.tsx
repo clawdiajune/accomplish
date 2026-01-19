@@ -79,12 +79,17 @@ export default function SettingsDialog({ open, onOpenChange, onApiKeySaved }: Se
   }, [settings, onOpenChange]);
 
   // Handle provider selection
-  const handleSelectProvider = useCallback((providerId: ProviderId) => {
+  const handleSelectProvider = useCallback(async (providerId: ProviderId) => {
     setSelectedProvider(providerId);
-    // Don't auto-expand grid - just show settings panel for selected provider
     setCloseWarning(false);
     setShowModelError(false);
-  }, []);
+
+    // Auto-set as active if the selected provider is ready
+    const provider = settings?.connectedProviders?.[providerId];
+    if (provider && isProviderReady(provider)) {
+      await setActiveProvider(providerId);
+    }
+  }, [settings?.connectedProviders, setActiveProvider]);
 
   // Handle provider connection
   const handleConnect = useCallback(async (provider: ConnectedProvider) => {
