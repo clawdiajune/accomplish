@@ -9,6 +9,7 @@ import {
   getBundledOpenCodeVersion,
 } from './cli-path';
 import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
+// TODO: Remove getAzureFoundryConfig import in v0.4.0 when legacy support is dropped
 import { getSelectedModel, getAzureFoundryConfig } from '../store/appSettings';
 import { getActiveProviderModel, getConnectedProvider } from '../store/providerSettings';
 import type { AzureFoundryCredentials } from '@accomplish/shared';
@@ -113,6 +114,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     let azureFoundryToken: string | undefined;
     const activeModel = getActiveProviderModel();
     const selectedModel = activeModel || getSelectedModel();
+    // TODO: Remove legacy azureFoundryConfig check in v0.4.0
     const azureFoundryConfig = getAzureFoundryConfig();
 
     // Check if Azure Foundry is configured via new provider settings
