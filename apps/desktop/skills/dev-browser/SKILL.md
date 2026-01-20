@@ -8,12 +8,17 @@ description: Browser automation via MCP tools. ALWAYS use these tools for ANY we
 ## RULE 1: AFTER EVERY CLICK → CHECK TABS
 
 ```
-browser_tabs(action="list")     ← Note: X tabs
+browser_tabs(action="list")                    ← Note: X tabs
 browser_click(...)
-browser_tabs(action="list")     ← MANDATORY! Compare to X
+browser_tabs(action="list")                    ← Compare to X
 ```
 
-If tab count increased → `browser_tabs(action="switch", index=NEW_INDEX)` then wait 2 seconds then screenshot.
+If tab count increased:
+```
+browser_tabs(action="switch", index=NEW_INDEX)
+browser_wait(condition="timeout", timeout=3000) ← MUST wait!
+browser_screenshot()                            ← Now verify
+```
 
 **NEVER click twice without checking tabs between clicks.**
 
@@ -29,7 +34,7 @@ browser_screenshot()
 
 **NEVER say "✓ typed text" without a screenshot showing it.**
 
-## RULE 3: AFTER TAB SWITCH → WAIT, DON'T NAVIGATE
+## RULE 3: AFTER TAB SWITCH → WAIT, NEVER NAVIGATE
 
 ```
 browser_tabs(action="switch", index=1)
@@ -37,7 +42,17 @@ browser_wait(condition="timeout", timeout=2000)
 browser_screenshot()
 ```
 
-If still seeing old page → wait and screenshot again. **NEVER navigate to the same URL.**
+**CRITICAL:** If screenshot still shows old page after tab switch:
+- The tab switch is slow, NOT failed
+- Solution: `browser_wait(timeout=3000)` then screenshot again
+- **NEVER call browser_navigate** - it will navigate the WRONG tab and create duplicates!
+
+**FORBIDDEN after clicking a link that opens a new tab:**
+```
+browser_navigate(...)  ← FORBIDDEN! Creates duplicate tabs!
+```
+
+**Why:** After tab switch, browser_navigate affects the OLD tab, not the new one. This creates two identical tabs.
 
 ## RULE 4: CANVAS APPS (Google Docs/Sheets/Figma)
 
