@@ -118,6 +118,7 @@ export function AzureFoundryProviderForm({
             <div className="flex gap-2">
               <button
                 onClick={() => setAuthType('api-key')}
+                data-testid="azure-foundry-auth-api-key"
                 className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   authType === 'api-key'
                     ? 'bg-[#0078D4] text-white'
@@ -128,6 +129,7 @@ export function AzureFoundryProviderForm({
               </button>
               <button
                 onClick={() => setAuthType('entra-id')}
+                data-testid="azure-foundry-auth-entra-id"
                 className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   authType === 'entra-id'
                     ? 'bg-[#0078D4] text-white'
