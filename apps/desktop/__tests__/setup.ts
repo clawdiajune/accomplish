@@ -13,101 +13,25 @@ if (typeof Element !== 'undefined') {
 }
 
 // Mock better-sqlite3 native module (not available in test environment)
+// This prevents the native module from being loaded, which would fail in CI
 vi.mock('better-sqlite3', () => {
-  const mockDb = {
-    pragma: vi.fn().mockReturnThis(),
-    prepare: vi.fn().mockReturnValue({
+  // Create a mock database class that can be instantiated with `new`
+  class MockDatabase {
+    pragma = vi.fn().mockReturnThis();
+    prepare = vi.fn().mockReturnValue({
       run: vi.fn(),
       get: vi.fn().mockReturnValue(null),
       all: vi.fn().mockReturnValue([]),
-    }),
-    exec: vi.fn(),
-    transaction: vi.fn((fn: () => unknown) => fn),
-    close: vi.fn(),
-  };
+    });
+    exec = vi.fn();
+    transaction = vi.fn((fn: () => unknown) => () => fn());
+    close = vi.fn();
+  }
+
   return {
-    default: vi.fn(() => mockDb),
+    default: MockDatabase,
   };
 });
-
-// Mock the db module to avoid native module loading
-vi.mock('@main/store/db', () => ({
-  getDatabase: vi.fn(() => ({
-    pragma: vi.fn(),
-    prepare: vi.fn().mockReturnValue({
-      run: vi.fn(),
-      get: vi.fn().mockReturnValue(null),
-      all: vi.fn().mockReturnValue([]),
-    }),
-    exec: vi.fn(),
-    transaction: vi.fn((fn: () => unknown) => fn),
-    close: vi.fn(),
-  })),
-  closeDatabase: vi.fn(),
-  resetDatabase: vi.fn(),
-  getDatabasePath: vi.fn(() => '/mock/path/openwork-dev.db'),
-  databaseExists: vi.fn(() => false),
-  initializeDatabase: vi.fn(),
-}));
-
-// Mock the provider settings repository
-vi.mock('@main/store/providerSettings', () => ({
-  getProviderSettings: vi.fn(() => ({
-    activeProviderId: null,
-    connectedProviders: {},
-    debugMode: false,
-  })),
-  setActiveProvider: vi.fn(),
-  getActiveProviderId: vi.fn(() => null),
-  getConnectedProvider: vi.fn(() => null),
-  setConnectedProvider: vi.fn(),
-  removeConnectedProvider: vi.fn(),
-  updateProviderModel: vi.fn(),
-  setProviderDebugMode: vi.fn(),
-  getProviderDebugMode: vi.fn(() => false),
-  clearProviderSettings: vi.fn(),
-  getActiveProviderModel: vi.fn(() => null),
-  hasReadyProvider: vi.fn(() => false),
-  getConnectedProviderIds: vi.fn(() => []),
-}));
-
-// Mock the app settings repository
-vi.mock('@main/store/appSettings', () => ({
-  getDebugMode: vi.fn(() => false),
-  setDebugMode: vi.fn(),
-  getOnboardingComplete: vi.fn(() => false),
-  setOnboardingComplete: vi.fn(),
-  getSelectedModel: vi.fn(() => null),
-  setSelectedModel: vi.fn(),
-  getOllamaConfig: vi.fn(() => null),
-  setOllamaConfig: vi.fn(),
-  getLiteLLMConfig: vi.fn(() => null),
-  setLiteLLMConfig: vi.fn(),
-  getAppSettings: vi.fn(() => ({
-    debugMode: false,
-    onboardingComplete: false,
-    selectedModel: null,
-    ollamaConfig: null,
-    litellmConfig: null,
-  })),
-  clearAppSettings: vi.fn(),
-}));
-
-// Mock the task history repository
-vi.mock('@main/store/taskHistory', () => ({
-  getTasks: vi.fn(() => []),
-  getTask: vi.fn(() => null),
-  saveTask: vi.fn(),
-  updateTaskStatus: vi.fn(),
-  addTaskMessage: vi.fn(),
-  updateTaskSessionId: vi.fn(),
-  updateTaskSummary: vi.fn(),
-  deleteTask: vi.fn(),
-  clearHistory: vi.fn(),
-  setMaxHistoryItems: vi.fn(),
-  clearTaskHistoryStore: vi.fn(),
-  flushPendingTasks: vi.fn(),
-}));
 
 // Extend global types for test utilities
 declare global {
