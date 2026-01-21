@@ -353,6 +353,9 @@ export async function generateOpenCodeConfig(): Promise<string> {
   if (ollamaProvider?.connectionStatus === 'connected' && ollamaProvider.credentials.type === 'ollama') {
     // New provider settings: Ollama is connected
     if (ollamaProvider.selectedModelId) {
+      // OpenCode CLI splits "ollama/model" into provider="ollama" and modelID="model"
+      // So we need to register the model without the "ollama/" prefix
+      const modelId = ollamaProvider.selectedModelId.replace(/^ollama\//, '');
       providerConfig.ollama = {
         npm: '@ai-sdk/openai-compatible',
         name: 'Ollama (local)',
@@ -360,13 +363,13 @@ export async function generateOpenCodeConfig(): Promise<string> {
           baseURL: `${ollamaProvider.credentials.serverUrl}/v1`,
         },
         models: {
-          [ollamaProvider.selectedModelId]: {
-            name: ollamaProvider.selectedModelId,
+          [modelId]: {
+            name: modelId,
             tools: true,
           },
         },
       };
-      console.log('[OpenCode Config] Ollama configured from new settings:', ollamaProvider.selectedModelId);
+      console.log('[OpenCode Config] Ollama configured from new settings:', modelId);
     }
   } else {
     // Legacy fallback: use old Ollama config

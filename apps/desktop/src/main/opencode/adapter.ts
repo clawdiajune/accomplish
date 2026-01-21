@@ -561,7 +561,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         args.push('--model', selectedModel.model);
       } else if (selectedModel.provider === 'ollama') {
         // Ollama models use format: ollama/model-name
-        args.push('--model', selectedModel.model);
+        const modelId = selectedModel.model.replace(/^ollama\//, '');
+        args.push('--model', `ollama/${modelId}`);
       } else if (selectedModel.provider === 'litellm') {
         // LiteLLM models pass through directly
         args.push('--model', selectedModel.model);
