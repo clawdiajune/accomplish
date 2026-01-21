@@ -644,7 +644,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
         console.log('[OpenCode Adapter] Tool call:', toolName);
 
-        // Track if complete_task was called (tool name may be prefixed with MCP server name)
+        // COMPLETION ENFORCEMENT: Track complete_task tool calls
+        // Tool name may be prefixed with MCP server name (e.g., "complete-task_complete_task")
+        // so we use endsWith() for fuzzy matching
         if (toolName === 'complete_task' || toolName.endsWith('_complete_task')) {
           this.completionEnforcer.handleCompleteTaskDetection(toolInput);
         }
@@ -725,6 +727,11 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         break;
 
       // Step finish event
+      // COMPLETION ENFORCEMENT: Previously emitted 'complete' immediately on stop/end_turn.
+      // Now we delegate to CompletionEnforcer which may:
+      // - Return 'complete' if complete_task was called and verified
+      // - Return 'pending' if verification or continuation is needed (handled on process exit)
+      // - Return 'continue' if more tool calls are expected (reason='tool_use')
       case 'step_finish':
         if (message.part.reason === 'error') {
           if (!this.hasCompleted) {
@@ -814,6 +821,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     return [command, ...args].map(arg => this.escapeShellArg(arg)).join(' ');
   }
 
+  /**
+   * COMPLETION ENFORCEMENT: Process exit handler
+   *
+   * When the CLI process exits with code 0 and we haven't already completed:
+   * 1. Delegate to CompletionEnforcer.handleProcessExit()
+   * 2. Enforcer checks if verification or continuation is pending
+   * 3. If so, it spawns a session resumption via callbacks
+   * 4. If not, it calls onComplete() to emit the 'complete' event
+   *
+   * This allows the enforcer to chain multiple CLI invocations (verification,
+   * continuation retries) while maintaining the same session context.
+   */
   private handleProcessExit(code: number | null): void {
     // Clean up PTY process reference
     this.ptyProcess = null;
@@ -859,6 +878,15 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   /**
    * Spawn a session resumption task with the given prompt.
    * Used by CompletionEnforcer callbacks for continuation and verification.
+   *
+   * WHY SESSION RESUMPTION (not PTY write):
+   * - OpenCode CLI supports --session-id to continue an existing conversation
+   * - This preserves full context (previous messages, tool results, etc.)
+   * - PTY write would just inject text without proper message framing
+   * - Session resumption creates a clean new API call with the prompt as a user message
+   *
+   * The same session ID is reused, so verification/continuation prompts appear
+   * as natural follow-up messages in the conversation.
    */
   private async spawnSessionResumption(prompt: string): Promise<void> {
     const sessionId = this.currentSessionId;

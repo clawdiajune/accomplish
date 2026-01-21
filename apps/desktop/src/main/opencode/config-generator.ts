@@ -612,6 +612,7 @@ export async function generateOpenCodeConfig(): Promise<string> {
         enabled: true,
         timeout: 30000,  // Longer timeout for browser operations
       },
+      // Provides complete_task tool - agent must call to signal task completion
       'complete-task': {
         type: 'local',
         command: ['npx', 'tsx', path.join(skillsPath, 'complete-task', 'src', 'index.ts')],

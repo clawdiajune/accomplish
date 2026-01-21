@@ -1,5 +1,19 @@
 /**
  * Prompt templates for continuation and verification flows.
+ *
+ * PROMPT DESIGN RATIONALE:
+ *
+ * CONTINUATION PROMPT:
+ * - Assertive tone ("STOP", "MUST", "NOW") because agent already ignored the requirement
+ * - Lists all three statuses so agent picks the appropriate one
+ * - "Do not respond with text" prevents agent from explaining instead of acting
+ *
+ * VERIFICATION PROMPT:
+ * - Uses screenshot because browser automation tasks often claim success without
+ *   confirming UI state actually changed
+ * - Echoes back the agent's own summary and original request for comparison
+ * - Requires re-calling complete_task(success) only if screenshot proves completion
+ * - If criteria not met, agent continues working (no complete_task call)
  */
 
 export function getContinuationPrompt(): string {

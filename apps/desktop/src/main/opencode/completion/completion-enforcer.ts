@@ -2,6 +2,31 @@
  * CompletionEnforcer coordinates the completion enforcement flow.
  * Uses the explicit CompletionState machine and delegates actual task
  * spawning to the adapter via callbacks.
+ *
+ * PURPOSE: Ensures agents properly finish tasks instead of stopping prematurely.
+ *
+ * TWO MAIN ENFORCEMENT MECHANISMS:
+ *
+ * 1. CONTINUATION PROMPTS (if agent stops without calling complete_task):
+ *    - Agent sometimes stops mid-task (API limits, confusion, etc.)
+ *    - We detect this on step_finish with reason='stop' but no complete_task call
+ *    - Spawn a session resumption with a firm reminder to call complete_task
+ *    - Retry up to 20 times before giving up
+ *
+ * 2. VERIFICATION (if agent claims status="success"):
+ *    - Agent may claim success without actually verifying work is done
+ *    - Especially problematic for browser automation where UI state matters
+ *    - On success claim, spawn verification task asking agent to:
+ *      a) Take a screenshot of current browser state
+ *      b) Compare against the plan's completion criteria
+ *      c) Only re-call complete_task(success) if screenshot proves completion
+ *    - If agent finds issues during verification, it continues working instead
+ *
+ * CALLBACK PATTERN:
+ * - Enforcer is decoupled from adapter via callbacks
+ * - onStartVerification/onStartContinuation: adapter spawns session resumption
+ * - onComplete: adapter emits the 'complete' event
+ * - onDebug: adapter emits debug info for the UI debug panel
  */
 
 import { CompletionState, CompletionFlowState, CompleteTaskArgs } from './completion-state';

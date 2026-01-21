@@ -1,6 +1,36 @@
 /**
  * Explicit state machine for completion enforcement flow.
- * Replaces 7 boolean/counter flags with clear state transitions.
+ *
+ * WHY A STATE MACHINE:
+ * - Replaces what would be 7+ boolean flags (completeTaskCalled, verificationPending,
+ *   continuationAttempts, isVerifying, etc.)
+ * - Makes state transitions explicit and debuggable
+ * - Prevents invalid state combinations (e.g., being in both verification and continuation)
+ *
+ * STATE FLOW DIAGRAM:
+ *
+ *   IDLE ──────────────────────────────────────┐
+ *     │                                        │
+ *     │ complete_task(success)                 │ complete_task(blocked/partial)
+ *     ▼                                        ▼
+ *   AWAITING_VERIFICATION              COMPLETE_TASK_CALLED ──► (task ends)
+ *     │
+ *     │ process exits
+ *     ▼
+ *   VERIFYING ─────────────────────────────────┐
+ *     │                                        │
+ *     │ agent stops without                    │ agent calls complete_task(success)
+ *     │ re-calling complete_task               ▼
+ *     ▼                                      DONE ──► (task ends)
+ *   VERIFICATION_CONTINUING
+ *     │
+ *     │ (merges back to continuation flow)
+ *     ▼
+ *   CONTINUATION_PENDING ◄─── agent stops without complete_task from IDLE
+ *     │
+ *     │ max retries exceeded
+ *     ▼
+ *   MAX_RETRIES_REACHED ──► (task ends with warning)
  */
 
 export enum CompletionFlowState {
