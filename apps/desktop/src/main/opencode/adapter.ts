@@ -722,6 +722,19 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         // Only complete if reason is 'stop' or 'end_turn' (final completion)
         // 'tool_use' means there are more steps coming
         if (message.part.reason === 'stop' || message.part.reason === 'end_turn') {
+          // Check if agent stopped without calling complete_task
+          if (!this.completeTaskCalled && this.continuationAttempts < this.maxContinuationAttempts) {
+            this.continuationAttempts++;
+            console.log(`[OpenCode Adapter] Agent stopped without complete_task, injecting continuation (attempt ${this.continuationAttempts}/${this.maxContinuationAttempts})`);
+            this.injectContinuationPrompt();
+            return; // Don't emit complete yet
+          }
+
+          // Either complete_task was called, or we've exhausted retries
+          if (!this.completeTaskCalled) {
+            console.warn('[OpenCode Adapter] Agent stopped without complete_task after max attempts');
+          }
+
           this.hasCompleted = true;
           this.emit('complete', {
             status: 'success',
