@@ -376,11 +376,12 @@ describe('OpenCode Adapter Module', () => {
         await adapter.startTask({ prompt: 'Test' });
 
         // Simulate complete_task tool being called first
+        // Note: Using 'blocked' status to skip verification flow (which only triggers on 'success')
         const toolCallMessage: OpenCodeToolCallMessage = {
           type: 'tool_call',
           part: {
             tool: 'complete_task',
-            input: { status: 'success', summary: 'Done', original_request_summary: 'Test' },
+            input: { status: 'blocked', summary: 'Done', original_request_summary: 'Test' },
           },
         };
         mockPtyInstance.simulateData(JSON.stringify(toolCallMessage) + '\n');
@@ -717,11 +718,12 @@ describe('OpenCode Adapter Module', () => {
         await adapter.startTask({ prompt: 'Test' });
 
         // Simulate complete_task being called first to avoid continuation logic
+        // Note: Using 'blocked' status to skip verification flow (which only triggers on 'success')
         const toolCallMessage: OpenCodeToolCallMessage = {
           type: 'tool_call',
           part: {
             tool: 'complete_task',
-            input: { status: 'success', summary: 'Done', original_request_summary: 'Test' },
+            input: { status: 'blocked', summary: 'Done', original_request_summary: 'Test' },
           },
         };
         mockPtyInstance.simulateData(JSON.stringify(toolCallMessage) + '\n');
@@ -888,6 +890,88 @@ describe('OpenCode Adapter Module', () => {
         // Assert
         expect(task.prompt).toBe('Continue task');
         expect(mockPtySpawn).toHaveBeenCalled();
+      });
+    });
+
+    describe('Session Resumption ANSI Filtering', () => {
+      it('should filter ANSI codes in resumed session data', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const messages: unknown[] = [];
+        adapter.on('message', (msg) => messages.push(msg));
+
+        // Start initial task to establish session
+        await adapter.resumeSession('existing-session', 'Continue task');
+
+        const validMessage: OpenCodeTextMessage = {
+          type: 'text',
+          part: { id: '1', sessionID: 's', messageID: 'm', type: 'text', text: 'Resumed' },
+        };
+
+        // Act - send JSON with ANSI codes (simulating PTY output in resumed session)
+        const ansiWrapped = '\x1B[32m' + JSON.stringify(validMessage) + '\x1B[0m\n';
+        mockPtyInstance.simulateData(ansiWrapped);
+
+        // Assert - message should be parsed despite ANSI codes
+        expect(messages.length).toBe(1);
+      });
+
+      it('should emit debug events in resumed session', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const debugEvents: Array<{ type: string; message: string }> = [];
+        adapter.on('debug', (event) => debugEvents.push(event));
+
+        // Start resumed session
+        await adapter.resumeSession('existing-session', 'Continue task');
+
+        const validMessage: OpenCodeTextMessage = {
+          type: 'text',
+          part: { id: '1', sessionID: 's', messageID: 'm', type: 'text', text: 'Test' },
+        };
+
+        // Act
+        mockPtyInstance.simulateData(JSON.stringify(validMessage) + '\n');
+
+        // Assert - should have stdout debug events
+        expect(debugEvents.some(e => e.type === 'stdout')).toBe(true);
+      });
+
+      it('should handle Windows PowerShell ANSI sequences in resumed session', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const messages: unknown[] = [];
+        adapter.on('message', (msg) => messages.push(msg));
+
+        await adapter.resumeSession('existing-session', 'Continue task');
+
+        const validMessage: OpenCodeTextMessage = {
+          type: 'text',
+          part: { id: '1', sessionID: 's', messageID: 'm', type: 'text', text: 'Windows' },
+        };
+
+        // Act - send JSON with DEC mode sequences (cursor visibility) and OSC sequences (window titles)
+        const windowsAnsi = '\x1B[?25l\x1B]0;PowerShell\x07' + JSON.stringify(validMessage) + '\x1B[?25h\n';
+        mockPtyInstance.simulateData(windowsAnsi);
+
+        // Assert - message should be parsed
+        expect(messages.length).toBe(1);
+      });
+
+      it('should not feed empty data to parser in resumed session', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const messages: unknown[] = [];
+        adapter.on('message', (msg) => messages.push(msg));
+
+        await adapter.resumeSession('existing-session', 'Continue task');
+
+        // Act - send only ANSI codes (no actual content)
+        mockPtyInstance.simulateData('\x1B[32m\x1B[0m');
+        mockPtyInstance.simulateData('   \n'); // Only whitespace
+
+        // Assert - no messages should be parsed from empty/whitespace data
+        expect(messages.length).toBe(0);
       });
     });
   });

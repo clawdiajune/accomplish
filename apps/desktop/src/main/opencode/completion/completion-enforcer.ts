@@ -153,10 +153,12 @@ export class CompletionEnforcer {
       return;
     }
 
-    // No pending actions
-    if (this.state.isDone() || this.state.getState() === CompletionFlowState.COMPLETE_TASK_CALLED) {
-      this.callbacks.onComplete();
-    }
+    // No pending actions - complete the task
+    // This handles:
+    // - DONE: verification completed successfully
+    // - COMPLETE_TASK_CALLED: complete_task called (non-success status)
+    // - IDLE: process exited cleanly without triggering completion flow
+    this.callbacks.onComplete();
   }
 
   /**

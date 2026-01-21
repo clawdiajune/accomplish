@@ -727,12 +727,14 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       // Step finish event
       case 'step_finish':
         if (message.part.reason === 'error') {
-          this.hasCompleted = true;
-          this.emit('complete', {
-            status: 'error',
-            sessionId: this.currentSessionId || undefined,
-            error: 'Task failed',
-          });
+          if (!this.hasCompleted) {
+            this.hasCompleted = true;
+            this.emit('complete', {
+              status: 'error',
+              sessionId: this.currentSessionId || undefined,
+              error: 'Task failed',
+            });
+          }
           break;
         }
 
@@ -740,7 +742,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         const action = this.completionEnforcer.handleStepFinish(message.part.reason);
         console.log(`[OpenCode Adapter] step_finish action: ${action}`);
 
-        if (action === 'complete') {
+        if (action === 'complete' && !this.hasCompleted) {
           this.hasCompleted = true;
           this.emit('complete', {
             status: 'success',
@@ -816,6 +818,19 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     // Clean up PTY process reference
     this.ptyProcess = null;
 
+    // Handle interrupted tasks immediately (before completion enforcer)
+    // This ensures user interrupts are respected regardless of completion state
+    if (this.wasInterrupted && code === 0 && !this.hasCompleted) {
+      console.log('[OpenCode CLI] Task was interrupted by user');
+      this.hasCompleted = true;
+      this.emit('complete', {
+        status: 'interrupted',
+        sessionId: this.currentSessionId || undefined,
+      });
+      this.currentTaskId = null;
+      return;
+    }
+
     // Delegate to completion enforcer for verification/continuation handling
     if (code === 0 && !this.hasCompleted) {
       this.completionEnforcer.handleProcessExit(code).catch((error) => {
@@ -832,20 +847,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     // Only emit complete/error if we haven't already received a result message
     if (!this.hasCompleted) {
-      if (this.wasInterrupted && code === 0) {
-        // User interrupted the task - emit interrupted status so they can continue
-        console.log('[OpenCode CLI] Task was interrupted by user');
-        this.emit('complete', {
-          status: 'interrupted',
-          sessionId: this.currentSessionId || undefined,
-        });
-      } else if (code === 0) {
-        // Normal exit without result message
-        this.emit('complete', {
-          status: 'success',
-          sessionId: this.currentSessionId || undefined,
-        });
-      } else if (code !== null) {
+      if (code !== null && code !== 0) {
         // Error exit
         this.emit('error', new Error(`OpenCode CLI exited with code ${code}`));
       }
