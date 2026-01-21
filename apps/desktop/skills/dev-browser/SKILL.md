@@ -122,6 +122,51 @@ browser_snapshot()  # See what actually happened
 4. Retry the original action
 5. Verify again
 
+## Token-Efficient Workflow
+
+Browser snapshots consume significant context. Use this pattern to stay within limits:
+
+### The Pattern
+
+1. **Navigate** → `browser_screenshot()` to verify page loaded
+2. **Find elements** → `browser_snapshot()` to get refs (interactive-only by default)
+3. **Interact** → `browser_click(ref="e5")` or `browser_type(ref="e3", text="...")`
+4. **Verify** → `browser_is_visible(selector=".success")` or `browser_screenshot()`
+
+### Why This Matters
+
+| Tool | Tokens | Use For |
+|------|--------|---------|
+| `browser_screenshot()` | ~2K | Verify page state, see visual layout |
+| `browser_snapshot()` | ~3K | Get element refs for clicking/typing |
+| `browser_snapshot(interactive_only=false)` | ~20K | Debug accessibility, find hidden elements |
+| `browser_is_visible()` | ~10 | Quick element existence check |
+
+### Rules
+
+- **Prefer screenshots for verification** - They show visual state and cost 10x less
+- **Use verification tools** - `browser_is_visible`, `browser_is_enabled`, `browser_is_checked` are nearly free
+- **Avoid repeated full snapshots** - Each one costs ~20K tokens
+- **One snapshot per page** - Get refs once, then interact; don't re-snapshot unless page changed
+
+### Example: Reviewing 10 Listings
+
+```
+# BAD: 400K tokens (will fail)
+for each listing:
+  browser_navigate(url)
+  browser_snapshot()           # 20K tokens
+  browser_snapshot()           # 20K more to verify
+
+# GOOD: 50K tokens (safe)
+for each listing:
+  browser_navigate(url)
+  browser_screenshot()         # 2K tokens - verify loaded
+  browser_snapshot()           # 3K tokens - get refs (interactive-only)
+  browser_click(ref="e5")
+  browser_is_visible(".done")  # 10 tokens - verify success
+```
+
 ## Error Recovery
 
 When actions fail, the error message will tell you what to do:
