@@ -75,6 +75,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private completeTaskCalled: boolean = false;
   private continuationAttempts: number = 0;
   private readonly maxContinuationAttempts: number = 2;
+  private pendingContinuation: boolean = false;
+  private lastWorkingDirectory: string | undefined;
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -160,6 +162,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.wasInterrupted = false;
     this.completeTaskCalled = false;
     this.continuationAttempts = 0;
+    this.pendingContinuation = false;
+    this.lastWorkingDirectory = config.workingDirectory;
 
     // Start the log watcher to detect errors that aren't output as JSON
     if (this.logWatcher) {
@@ -725,9 +729,15 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           // Check if agent stopped without calling complete_task
           if (!this.completeTaskCalled && this.continuationAttempts < this.maxContinuationAttempts) {
             this.continuationAttempts++;
-            console.log(`[OpenCode Adapter] Agent stopped without complete_task, injecting continuation (attempt ${this.continuationAttempts}/${this.maxContinuationAttempts})`);
-            this.injectContinuationPrompt();
-            return; // Don't emit complete yet
+            console.log(`[OpenCode Adapter] Agent stopped without complete_task, scheduling continuation (attempt ${this.continuationAttempts}/${this.maxContinuationAttempts})`);
+            // Set flag to trigger continuation after process exits
+            // We can't inject via stdin because the CLI exits after step_finish
+            this.pendingContinuation = true;
+            this.emit('debug', {
+              type: 'continuation',
+              message: `Scheduled continuation prompt (attempt ${this.continuationAttempts})`,
+            });
+            return; // Don't emit complete yet, let handleProcessExit handle continuation
           }
 
           // Either complete_task was called, or we've exhausted retries
@@ -789,6 +799,26 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   }
 
   private handleProcessExit(code: number | null): void {
+    // Clean up PTY process reference
+    this.ptyProcess = null;
+
+    // Check if we need to continue with a continuation prompt
+    if (this.pendingContinuation && code === 0 && !this.hasCompleted) {
+      console.log('[OpenCode Adapter] Process exited, starting continuation task');
+      this.pendingContinuation = false;
+      // Start continuation task asynchronously
+      this.startContinuationTask().catch((error) => {
+        console.error('[OpenCode Adapter] Failed to start continuation task:', error);
+        this.hasCompleted = true;
+        this.emit('complete', {
+          status: 'error',
+          sessionId: this.currentSessionId || undefined,
+          error: `Failed to continue: ${error.message}`,
+        });
+      });
+      return; // Don't emit complete yet, continuation task will handle it
+    }
+
     // Only emit complete/error if we haven't already received a result message
     if (!this.hasCompleted) {
       if (this.wasInterrupted && code === 0) {
@@ -810,20 +840,20 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       }
     }
 
-    this.ptyProcess = null;
     this.currentTaskId = null;
   }
 
   /**
-   * Inject a continuation prompt when agent stops without calling complete_task
+   * Start a continuation task when agent stops without calling complete_task.
+   * Uses session resumption to continue the conversation.
    */
-  private injectContinuationPrompt(): void {
-    if (!this.ptyProcess) {
-      console.warn('[OpenCode Adapter] Cannot inject continuation - no active process');
-      return;
+  private async startContinuationTask(): Promise<void> {
+    const sessionId = this.currentSessionId;
+    if (!sessionId) {
+      throw new Error('No session ID available for continuation');
     }
 
-    const continuationMessage = `You stopped without calling the complete_task tool.
+    const continuationPrompt = `You stopped without calling the complete_task tool.
 
 Review the original request: Did you complete ALL parts of what was asked?
 
@@ -833,15 +863,69 @@ Review the original request: Did you complete ALL parts of what was asked?
 
 Do not stop again without calling complete_task.`;
 
-    // Send as user input to the PTY
-    this.ptyProcess.write(continuationMessage + '\n');
+    console.log(`[OpenCode Adapter] Starting continuation task with session ${sessionId} (attempt ${this.continuationAttempts})`);
+
+    // Reset stream parser for new process but preserve other state
+    this.streamParser.reset();
+
+    // Build args for continuation - reuse same model/settings
+    const config: TaskConfig = {
+      prompt: continuationPrompt,
+      sessionId: sessionId,
+      workingDirectory: this.lastWorkingDirectory,
+    };
+
+    const cliArgs = await this.buildCliArgs(config);
+
+    // Get the bundled CLI path
+    const { command, args: baseArgs } = getOpenCodeCliPath();
+    console.log('[OpenCode Adapter] Continuation command:', command, [...baseArgs, ...cliArgs].join(' '));
+
+    // Build environment
+    const env = await this.buildEnvironment();
+
+    const allArgs = [...baseArgs, ...cliArgs];
+    const safeCwd = config.workingDirectory || app.getPath('temp');
+
+    // Start new PTY process for continuation
+    const fullCommand = [command, ...allArgs].map(arg => {
+      if (process.platform === 'win32') {
+        if (arg.includes(' ') || arg.includes('"')) {
+          return `"${arg.replace(/"/g, '""')}"`;
+        }
+        return arg;
+      } else {
+        if (arg.includes("'") || arg.includes(' ') || arg.includes('$') || arg.includes('`') || arg.includes('\\') || arg.includes('"') || arg.includes('\n')) {
+          return `'${arg.replace(/'/g, "'\\''")}'`;
+        }
+        return arg;
+      }
+    }).join(' ');
+
+    const shellCmd = this.getPlatformShell();
+    const shellArgs = this.getShellArgs(fullCommand);
+
+    this.ptyProcess = pty.spawn(shellCmd, shellArgs, {
+      name: 'xterm-256color',
+      cols: 200,
+      rows: 30,
+      cwd: safeCwd,
+      env: env as { [key: string]: string },
+    });
+
+    // Set up event handlers for new process
+    this.ptyProcess.onData((data: string) => {
+      this.streamParser.feed(data);
+    });
+
+    this.ptyProcess.onExit(({ exitCode }) => {
+      this.handleProcessExit(exitCode);
+    });
 
     this.emit('debug', {
       type: 'continuation',
-      message: `Injected continuation prompt (attempt ${this.continuationAttempts})`,
+      message: `Started continuation task (attempt ${this.continuationAttempts})`,
     });
-
-    console.log(`[OpenCode Adapter] Injected continuation prompt (attempt ${this.continuationAttempts})`);
   }
 
   private generateTaskId(): string {

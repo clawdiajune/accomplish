@@ -404,13 +404,24 @@ describe('OpenCode Adapter Module', () => {
         expect(completeEvents[0].status).toBe('success');
       });
 
-      it('should inject continuation prompt on step_finish when complete_task was not called', async () => {
+      it('should schedule continuation on step_finish when complete_task was not called', async () => {
         // Arrange
         const adapter = new OpenCodeAdapter();
         const completeEvents: Array<{ status: string; sessionId?: string }> = [];
+        const debugEvents: Array<{ type: string; message: string }> = [];
         adapter.on('complete', (result) => completeEvents.push(result));
+        adapter.on('debug', (event) => debugEvents.push(event));
 
         await adapter.startTask({ prompt: 'Test' });
+
+        // Simulate session ID being set (normally happens via step_start)
+        const stepStartMessage = {
+          type: 'step_start',
+          part: {
+            sessionID: 'session-123',
+          },
+        };
+        mockPtyInstance.simulateData(JSON.stringify(stepStartMessage) + '\n');
 
         const stepFinishMessage: OpenCodeStepFinishMessage = {
           type: 'step_finish',
@@ -426,12 +437,10 @@ describe('OpenCode Adapter Module', () => {
         // Act
         mockPtyInstance.simulateData(JSON.stringify(stepFinishMessage) + '\n');
 
-        // Assert - should NOT emit complete yet (continuation prompt injected)
+        // Assert - should NOT emit complete yet (continuation scheduled)
         expect(completeEvents.length).toBe(0);
-        // Should have written continuation prompt to PTY
-        expect(mockPtyInstance.write).toHaveBeenCalledWith(
-          expect.stringContaining('complete_task')
-        );
+        // Should have emitted debug event about scheduled continuation
+        expect(debugEvents.some(e => e.type === 'continuation')).toBe(true);
       });
 
       it('should emit complete after max continuation attempts without complete_task', async () => {
@@ -454,6 +463,8 @@ describe('OpenCode Adapter Module', () => {
         };
 
         // Act - simulate 3 stop events (max attempts is 2)
+        // Note: In the real flow, continuation happens after process exit,
+        // but for unit testing we simulate multiple step_finish messages
         mockPtyInstance.simulateData(JSON.stringify(stepFinishMessage) + '\n');
         mockPtyInstance.simulateData(JSON.stringify(stepFinishMessage) + '\n');
         mockPtyInstance.simulateData(JSON.stringify(stepFinishMessage) + '\n');
@@ -705,7 +716,17 @@ describe('OpenCode Adapter Module', () => {
 
         await adapter.startTask({ prompt: 'Test' });
 
-        // Emit step_finish first (marks hasCompleted = true)
+        // Simulate complete_task being called first to avoid continuation logic
+        const toolCallMessage: OpenCodeToolCallMessage = {
+          type: 'tool_call',
+          part: {
+            tool: 'complete_task',
+            input: { status: 'success', summary: 'Done', original_request_summary: 'Test' },
+          },
+        };
+        mockPtyInstance.simulateData(JSON.stringify(toolCallMessage) + '\n');
+
+        // Emit step_finish (marks hasCompleted = true)
         const stepFinish: OpenCodeStepFinishMessage = {
           type: 'step_finish',
           part: {
