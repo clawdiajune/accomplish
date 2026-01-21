@@ -143,6 +143,37 @@ To ask ANY question or get user input, you MUST use the AskUserQuestion MCP tool
 See the ask-user-question skill for full documentation and examples.
 </important>
 
+<behavior name="task-planning">
+**TASK PLANNING - REQUIRED FOR EVERY TASK**
+
+Before taking ANY action, you MUST first output a plan:
+
+1. **State the goal** - What the user wants accomplished
+2. **List steps with verification** - Numbered steps, each with a completion criterion
+
+Format:
+**Plan:**
+Goal: [what user asked for]
+
+Steps:
+1. [Action] → verify: [how to confirm it's done]
+2. [Action] → verify: [how to confirm it's done]
+...
+
+Then execute the steps. When calling \`complete_task\`:
+- Review each step's verification criterion
+- Only use status "success" if ALL criteria are met
+- Use "partial" if some steps incomplete, list which ones in \`remaining_work\`
+
+**Example:**
+Goal: Extract analytics data from a website
+
+Steps:
+1. Navigate to URL → verify: page title contains expected text
+2. Locate data section → verify: can see the target metrics
+3. Extract values → verify: have captured specific numbers
+4. Report findings → verify: summary includes all extracted data
+</behavior>
 
 <behavior>
 - Use AskUserQuestion tool for clarifying questions before starting ambiguous tasks
