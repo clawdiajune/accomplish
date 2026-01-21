@@ -1286,8 +1286,9 @@ interface BrowserSelectInput {
 }
 
 interface BrowserWaitInput {
-  condition: 'selector' | 'hidden' | 'navigation' | 'network_idle' | 'timeout';
+  condition: 'selector' | 'hidden' | 'navigation' | 'network_idle' | 'timeout' | 'function';
   selector?: string;
+  script?: string;
   timeout?: number;
   page_name?: string;
 }
@@ -1716,12 +1717,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           condition: {
             type: 'string',
-            enum: ['selector', 'hidden', 'navigation', 'network_idle', 'timeout'],
-            description: '"selector" waits for element to appear, "hidden" waits for element to disappear, "navigation" waits for page navigation, "network_idle" waits for network to settle, "timeout" waits fixed time',
+            enum: ['selector', 'hidden', 'navigation', 'network_idle', 'timeout', 'function'],
+            description: '"selector" waits for element to appear, "hidden" waits for element to disappear, "navigation" waits for page navigation, "network_idle" waits for network to settle, "timeout" waits fixed time, "function" waits for custom JS condition to return true',
           },
           selector: {
             type: 'string',
             description: 'CSS selector (required for "selector" and "hidden" conditions)',
+          },
+          script: {
+            type: 'string',
+            description: 'JavaScript expression that returns true when condition is met (required for "function" condition). Example: "document.querySelector(\'.loaded\') !== null"',
           },
           timeout: {
             type: 'number',
@@ -2627,7 +2632,7 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
       }
 
       case 'browser_wait': {
-        const { condition, selector, timeout, page_name } = args as BrowserWaitInput;
+        const { condition, selector, script, timeout, page_name } = args as BrowserWaitInput;
         const page = await getPage(page_name);
         const waitTimeout = timeout || 30000;
 
@@ -2674,6 +2679,26 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
             return {
               content: [{ type: 'text', text: `Waited ${waitMs}ms` }],
             };
+          }
+          case 'function': {
+            if (!script) {
+              return {
+                content: [{ type: 'text', text: 'Error: "script" is required for function condition. Provide a JS expression that returns true when ready.' }],
+                isError: true,
+              };
+            }
+            try {
+              await page.waitForFunction(script, { timeout: waitTimeout });
+              return {
+                content: [{ type: 'text', text: `Custom condition met: ${script.substring(0, 50)}${script.length > 50 ? '...' : ''}` }],
+              };
+            } catch (err) {
+              const friendlyError = toAIFriendlyError(err, script);
+              return {
+                content: [{ type: 'text', text: friendlyError.message }],
+                isError: true,
+              };
+            }
           }
           default:
             return {
