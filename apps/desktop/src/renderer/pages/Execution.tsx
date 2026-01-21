@@ -148,7 +148,7 @@ export default function ExecutionPage() {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const threshold = 50; // pixels from bottom to consider "at bottom"
+    const threshold = 150; // pixels from bottom to consider "at bottom" - larger value means button only appears after scrolling up more
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - threshold;
     setIsAtBottom(atBottom);
   }, []);
