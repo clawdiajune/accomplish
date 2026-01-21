@@ -26,10 +26,10 @@ Shell commands open the user's **default browser** (Safari, Arc, Firefox, etc.),
 - url: The URL to visit (e.g., "google.com" or "https://example.com")
 - page_name: Optional name for the page (default: "main")
 
-**browser_snapshot(page_name?)** - Get the page's accessibility tree
+**browser_snapshot(page_name?, interactive_only?)** - Get the page's accessibility tree
 - Returns YAML with element refs like [ref=e5]
 - Use these refs with browser_click and browser_type
-- Always shows only interactive elements (buttons, links, inputs) for token efficiency
+- **interactive_only=true**: Show only clickable/typeable elements (recommended!)
 
 **browser_click(x?, y?, ref?, selector?, page_name?)** - Click on the page
 - x, y: Pixel coordinates (default method)
@@ -139,12 +139,14 @@ Browser snapshots consume significant context. Use this pattern to stay within l
 |------|--------|---------|
 | `browser_screenshot()` | ~2K | Verify page state, see visual layout |
 | `browser_snapshot()` | ~3K | Get element refs for clicking/typing |
+| `browser_snapshot(interactive_only=false)` | ~20K | Debug accessibility, find hidden elements |
 | `browser_is_visible()` | ~10 | Quick element existence check |
 
 ### Rules
 
-- **Prefer screenshots for verification** - They show visual state and use fewer tokens
+- **Prefer screenshots for verification** - They show visual state and cost 10x less
 - **Use verification tools** - `browser_is_visible`, `browser_is_enabled`, `browser_is_checked` are nearly free
+- **Avoid repeated full snapshots** - Each one costs ~20K tokens
 - **One snapshot per page** - Get refs once, then interact; don't re-snapshot unless page changed
 
 ### Example: Reviewing 10 Listings
