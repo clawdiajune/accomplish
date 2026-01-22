@@ -877,33 +877,101 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   }
 
   /**
-   * Spawn a session resumption task with the given prompt.
-   * Used by CompletionEnforcer callbacks for continuation and verification.
+   * Fetch context from the context-memory MCP server.
+   * This is called before spawning a continuation to get the saved context.
+   */
+  private async fetchSavedContext(): Promise<string | null> {
+    // The context is stored in ~/.accomplish/context-memory/{taskId}.json
+    // We read it directly since MCP server may not be running
+    const contextPath = path.join(
+      app.getPath('home'),
+      '.accomplish',
+      'context-memory',
+      `${this.currentTaskId || 'default'}.json`
+    );
+
+    try {
+      if (!fs.existsSync(contextPath)) {
+        console.log('[OpenCode Adapter] No saved context found');
+        return null;
+      }
+
+      const data = fs.readFileSync(contextPath, 'utf-8');
+      const context = JSON.parse(data);
+
+      // Format as continuation prompt
+      const sections: string[] = [];
+      sections.push('## Session Context (Continuation)\n');
+      sections.push('### Original Request');
+      sections.push(context.originalRequest + '\n');
+      sections.push('### Work Completed');
+      sections.push(context.summary + '\n');
+
+      if (context.keyDecisions?.length > 0) {
+        sections.push('### Key Decisions');
+        for (const decision of context.keyDecisions) {
+          sections.push(`- ${decision}`);
+        }
+        sections.push('');
+      }
+
+      if (context.filesModified?.length > 0) {
+        sections.push('### Files Touched');
+        for (const file of context.filesModified) {
+          sections.push(`- ${file.path} (${file.operation})`);
+        }
+        sections.push('');
+      }
+
+      sections.push('### Current Status');
+      sections.push(context.currentStatus + '\n');
+
+      if (context.remainingWork) {
+        sections.push('### Remaining Work');
+        sections.push(context.remainingWork + '\n');
+      }
+
+      sections.push('---\n');
+      sections.push('**IMPORTANT**: Continue from where you left off. All context you need is above.');
+      sections.push('When done, call complete_task with the final status.');
+
+      return sections.join('\n');
+    } catch (error) {
+      console.error('[OpenCode Adapter] Failed to fetch saved context:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Spawn a continuation task.
    *
-   * WHY SESSION RESUMPTION (not PTY write):
-   * - OpenCode CLI supports --session-id to continue an existing conversation
-   * - This preserves full context (previous messages, tool results, etc.)
-   * - PTY write would just inject text without proper message framing
-   * - Session resumption creates a clean new API call with the prompt as a user message
-   *
-   * The same session ID is reused, so verification/continuation prompts appear
-   * as natural follow-up messages in the conversation.
+   * NEW APPROACH: Use saved context instead of --session flag.
+   * This avoids cache invalidation and provides reliable context.
    */
   private async spawnSessionResumption(prompt: string): Promise<void> {
-    const sessionId = this.currentSessionId;
-    if (!sessionId) {
-      throw new Error('No session ID available for session resumption');
+    console.log('[OpenCode Adapter] Starting summary-based continuation');
+
+    // Try to get saved context
+    const savedContext = await this.fetchSavedContext();
+
+    let fullPrompt: string;
+    if (savedContext) {
+      // Combine saved context with continuation prompt
+      fullPrompt = `${savedContext}\n\n${prompt}`;
+      console.log('[OpenCode Adapter] Using saved context for continuation');
+    } else {
+      // No saved context - just use the prompt
+      fullPrompt = prompt;
+      console.log('[OpenCode Adapter] No saved context, using prompt only');
     }
 
-    console.log(`[OpenCode Adapter] Starting session resumption with session ${sessionId}`);
-
-    // Reset stream parser for new process but preserve other state
+    // Reset stream parser for new process
     this.streamParser.reset();
 
-    // Build args for resumption - reuse same model/settings
+    // Build args WITHOUT --session flag (fresh conversation)
     const config: TaskConfig = {
-      prompt,
-      sessionId: sessionId,
+      prompt: fullPrompt,
+      // NO sessionId - this is intentional!
       workingDirectory: this.lastWorkingDirectory,
     };
 
@@ -911,7 +979,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     // Get the bundled CLI path
     const { command, args: baseArgs } = getOpenCodeCliPath();
-    console.log('[OpenCode Adapter] Session resumption command:', command, [...baseArgs, ...cliArgs].join(' '));
+    console.log('[OpenCode Adapter] Summary continuation command:', command);
 
     // Build environment
     const env = await this.buildEnvironment();
@@ -919,9 +987,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     const allArgs = [...baseArgs, ...cliArgs];
     const safeCwd = config.workingDirectory || app.getPath('temp');
 
-    // Start new PTY process for session resumption
+    // Start new PTY process
     const fullCommand = this.buildShellCommand(command, allArgs);
-
     const shellCmd = this.getPlatformShell();
     const shellArgs = this.getShellArgs(fullCommand);
 
@@ -933,21 +1000,16 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       env: env as { [key: string]: string },
     });
 
-    // Set up event handlers for new process
+    // Set up event handlers
     this.ptyProcess.onData((data: string) => {
-      // Filter out ANSI escape codes and control characters for cleaner parsing
-      // Enhanced to handle Windows PowerShell sequences (cursor visibility, window titles)
       const cleanData = data
-        .replace(/\x1B\[[0-9;?]*[a-zA-Z]/g, '')  // CSI sequences (added ? for DEC modes like cursor hide)
-        .replace(/\x1B\][^\x07]*\x07/g, '')       // OSC sequences with BEL terminator (window titles)
-        .replace(/\x1B\][^\x1B]*\x1B\\/g, '');    // OSC sequences with ST terminator
+        .replace(/\x1B\[[0-9;?]*[a-zA-Z]/g, '')
+        .replace(/\x1B\][^\x07]*\x07/g, '')
+        .replace(/\x1B\][^\x1B]*\x1B\\/g, '');
       if (cleanData.trim()) {
-        // Truncate for console.log to avoid flooding terminal
         const truncated = cleanData.substring(0, 500) + (cleanData.length > 500 ? '...' : '');
         console.log('[OpenCode CLI stdout]:', truncated);
-        // Send full data to debug panel
         this.emit('debug', { type: 'stdout', message: cleanData });
-
         this.streamParser.feed(cleanData);
       }
     });
