@@ -2499,6 +2499,8 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
             };
           }
           await element.scrollIntoViewIfNeeded();
+          // Reset snapshot state after scroll - content likely changed
+          resetSnapshotManager();
           return {
             content: [{ type: 'text', text: `Scrolled [ref=${ref}] into view` }],
           };
@@ -2513,6 +2515,8 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
             };
           }
           await element.scrollIntoViewIfNeeded();
+          // Reset snapshot state after scroll - content likely changed
+          resetSnapshotManager();
           return {
             content: [{ type: 'text', text: `Scrolled "${selector}" into view` }],
           };
@@ -2522,11 +2526,15 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
         if (position) {
           if (position === 'top') {
             await page.evaluate(() => window.scrollTo(0, 0));
+            // Reset snapshot state after scroll - content likely changed
+            resetSnapshotManager();
             return {
               content: [{ type: 'text', text: 'Scrolled to top of page' }],
             };
           } else if (position === 'bottom') {
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            // Reset snapshot state after scroll - content likely changed
+            resetSnapshotManager();
             return {
               content: [{ type: 'text', text: 'Scrolled to bottom of page' }],
             };
@@ -2555,6 +2563,8 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
           }
 
           await page.mouse.wheel(deltaX, deltaY);
+          // Reset snapshot state after scroll - content likely changed
+          resetSnapshotManager();
           return {
             content: [{ type: 'text', text: `Scrolled ${direction} by ${scrollAmount}px` }],
           };
