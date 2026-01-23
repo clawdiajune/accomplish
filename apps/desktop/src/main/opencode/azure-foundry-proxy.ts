@@ -63,11 +63,18 @@ function stripReasoningEffort(body: Buffer): Buffer {
 }
 
 /**
- * Validate request path - only allow Azure OpenAI API paths
+ * Validate request path - only allow OpenAI-compatible API paths
  */
 function isValidRequestPath(path: string): boolean {
-  // Allow Azure OpenAI paths and health check
-  return path === '/health' || path.startsWith('/openai/');
+  // Allow health check
+  if (path === '/health') return true;
+  // Allow Azure OpenAI paths (e.g., /openai/deployments/...)
+  if (path.startsWith('/openai/')) return true;
+  // Allow standard OpenAI SDK paths (e.g., /chat/completions, /completions, /embeddings)
+  if (path.startsWith('/chat/') || path.startsWith('/completions') || path.startsWith('/embeddings')) return true;
+  // Allow models endpoint
+  if (path === '/models' || path.startsWith('/models/')) return true;
+  return false;
 }
 
 function proxyRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
