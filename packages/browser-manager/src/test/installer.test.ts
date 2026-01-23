@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPackageManager, isChromiumInstalled } from './installer.js';
+import { detectPackageManager, isChromiumInstalled } from '../installer.js';
 
 describe('installer', () => {
   describe('detectPackageManager', () => {

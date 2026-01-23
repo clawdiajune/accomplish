@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getProfileDir, getPlatformDataDir } from './profile.js';
+import { getProfileDir, getPlatformDataDir } from '../profile.js';
 
 describe('profile', () => {
   describe('getPlatformDataDir', () => {

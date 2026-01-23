@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LaunchModeLauncher } from './launcher.js';
+import { LaunchModeLauncher } from '../launcher.js';
 
 describe('launcher', () => {
   describe('LaunchModeLauncher', () => {

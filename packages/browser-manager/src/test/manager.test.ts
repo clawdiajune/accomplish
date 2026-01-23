@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { BrowserManager } from './manager.js';
-import type { BrowserState } from './types.js';
+import { BrowserManager } from '../manager.js';
+import type { BrowserState } from '../types.js';
 
 describe('BrowserManager', () => {
   let manager: BrowserManager;

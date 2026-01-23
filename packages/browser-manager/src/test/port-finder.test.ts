@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findAvailablePorts, checkPortStatus } from './port-finder.js';
-import type { HealthResult } from './types.js';
+import { findAvailablePorts, checkPortStatus } from '../port-finder.js';
+import type { HealthResult } from '../types.js';
 
 describe('port-finder', () => {
   describe('checkPortStatus', () => {

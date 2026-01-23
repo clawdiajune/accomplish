@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateHealth } from './health.js';
-import type { HealthCheck } from './types.js';
+import { evaluateHealth } from '../health.js';
+import type { HealthCheck } from '../types.js';
 
 describe('health', () => {
   describe('evaluateHealth', () => {
