@@ -25,4 +25,4 @@ export type { PackageManager } from './installer.js';
 export { LaunchModeLauncher } from './launcher.js';
 export type { Launcher, LaunchOptions, LaunchResult } from './launcher.js';
 
-// BrowserManager will be added in Task 8
+export { BrowserManager } from './manager.js';
