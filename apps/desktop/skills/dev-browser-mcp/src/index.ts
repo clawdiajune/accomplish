@@ -109,7 +109,7 @@ let activePageOverride: Page | null = null;
 let glowingPage: Page | null = null;
 // Track last activity time for auto-timeout
 let lastActivityTime: number = Date.now();
-const GLOW_TIMEOUT_MS = 15000; // 15 seconds
+const GLOW_TIMEOUT_MS = 10000; // 10 seconds
 let glowCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
