@@ -1253,6 +1253,11 @@ const MessageBubble = memo(function MessageBubble({ message, shouldStream = fals
   const isSystem = message.type === 'system';
   const isAssistant = message.type === 'assistant';
 
+  // Skip todowrite messages entirely - shown in sidebar instead
+  if (isTool && message.toolName === 'todowrite') {
+    return null;
+  }
+
   // Get tool icon from mapping
   const toolName = message.toolName || message.content?.match(/Using tool: (\w+)/)?.[1];
   const ToolIcon = toolName && TOOL_PROGRESS_MAP[toolName]?.icon;
@@ -1327,8 +1332,7 @@ const MessageBubble = memo(function MessageBubble({ message, shouldStream = fals
         )}
       >
         {/* Tool messages: show only label and loading animation */}
-        {/* Skip todowrite - shown in sidebar instead */}
-        {isTool && message.toolName === 'todowrite' ? null : isTool ? (
+        {isTool ? (
           <>
             <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
               {ToolIcon ? <ToolIcon className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
