@@ -10,6 +10,7 @@ import { checkAndCleanupFreshInstall } from './store/freshInstallCleanup';
 import { initializeDatabase, closeDatabase } from './store/db';
 import { FutureSchemaError } from './store/migrations/errors';
 import { stopAzureFoundryProxy } from './opencode/azure-foundry-proxy';
+import { initializeLogCollector, shutdownLogCollector, getLogCollector } from './logging';
 
 // Local UI - no longer uses remote URL
 
@@ -136,6 +137,15 @@ if (!gotTheLock) {
   console.log('[Main] Second instance attempted; quitting');
   app.quit();
 } else {
+  // Initialize logging FIRST - before anything else
+  initializeLogCollector();
+  getLogCollector().logEnv('INFO', 'App starting', {
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    nodeVersion: process.version,
+  });
+
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -212,6 +222,8 @@ app.on('window-all-closed', () => {
 // Flush pending task history writes and dispose TaskManager before quitting
 app.on('before-quit', () => {
   console.log('[Main] App before-quit event fired');
+  // Flush and shutdown logging
+  shutdownLogCollector();
   flushPendingTasks();
   // Dispose all active tasks and cleanup PTY processes
   disposeTaskManager();
