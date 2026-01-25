@@ -10,6 +10,7 @@ import type { TaskMessage } from '@accomplish/shared';
 import { hasAnyReadyProvider } from '@accomplish/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { XCircle, CornerDownLeft, ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Terminal, Wrench, FileText, Search, Code, Brain, Clock, Square, Play, Download, File, Bug, ChevronUp, ChevronDown, Trash2, Check, Copy } from 'lucide-react';
@@ -948,7 +949,7 @@ export default function ExecutionPage() {
 
                         {/* Always-visible custom text input */}
                         <div className="mb-4">
-                          <Input
+                          <Textarea
                             value={customResponse}
                             onChange={(e) => {
                               setSelectedOptions([]); // Clear options when typing
@@ -956,10 +957,12 @@ export default function ExecutionPage() {
                             }}
                             placeholder="Enter a different option..."
                             aria-label="Custom response"
+                            rows={3}
                             onKeyDown={(e) => {
                               // Ignore Enter during IME composition (Chinese/Japanese input)
                               if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                              if (e.key === 'Enter' && customResponse.trim()) {
+                              // Submit on Cmd/Ctrl+Enter (not plain Enter, to allow multi-line)
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && customResponse.trim()) {
                                 handlePermissionResponse(true);
                               }
                             }}
