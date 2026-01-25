@@ -630,6 +630,24 @@ function getAriaSnapshotCode(): string {
 // === ariaSnapshot ===
 let lastRef = 0;
 
+/**
+ * Check if an element is visible within the viewport.
+ */
+function isInViewport(box) {
+  if (!box || box.width === 0 || box.height === 0) return false;
+
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // Element is in viewport if any part is visible
+  return (
+    box.x < viewportWidth &&
+    box.y < viewportHeight &&
+    box.x + box.width > 0 &&
+    box.y + box.height > 0
+  );
+}
+
 function generateAriaTree(rootElement) {
   const options = { visibility: "ariaOrVisible", refs: "interactable", refPrefix: "", includeGenericRole: true, renderActive: true, renderCursorPointer: true };
   const visited = new Set();
@@ -786,8 +804,9 @@ function normalizeStringChildren(rootA11yNode) {
 
 function hasPointerCursor(ariaNode) { return ariaNode.box.cursor === "pointer"; }
 
-function renderAriaTree(ariaSnapshot) {
-  const options = { visibility: "ariaOrVisible", refs: "interactable", refPrefix: "", includeGenericRole: true, renderActive: true, renderCursorPointer: true };
+function renderAriaTree(ariaSnapshot, snapshotOptions) {
+  snapshotOptions = snapshotOptions || {};
+  const options = { visibility: "ariaOrVisible", refs: "interactable", refPrefix: "", includeGenericRole: true, renderActive: true, renderCursorPointer: true, maxElements: snapshotOptions.maxElements, viewportOnly: snapshotOptions.viewportOnly };
   const lines = [];
   let nodesToRender = ariaSnapshot.root.role === "fragment" ? ariaSnapshot.root.children : [ariaSnapshot.root];
 
@@ -851,12 +870,13 @@ function renderAriaTree(ariaSnapshot) {
   return lines.join("\\n");
 }
 
-function getAISnapshot() {
+function getAISnapshot(options) {
+  options = options || {};
   const snapshot = generateAriaTree(document.body);
   const refsObject = {};
   for (const [ref, element] of snapshot.elements) refsObject[ref] = element;
   window.__devBrowserRefs = refsObject;
-  return renderAriaTree(snapshot);
+  return renderAriaTree(snapshot, options);
 }
 
 function selectSnapshotRef(ref) {
