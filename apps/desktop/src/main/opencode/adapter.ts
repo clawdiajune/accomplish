@@ -661,6 +661,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       env.LITELLM_API_KEY = apiKeys.litellm;
       console.log('[OpenCode CLI] Using LiteLLM API key from settings');
     }
+    if (apiKeys.minimax) {
+      env.MINIMAX_API_KEY = apiKeys.minimax;
+      console.log('[OpenCode CLI] Using MiniMax API key from settings');
+    }
 
     // Set Bedrock credentials if configured
     const bedrockCredentials = getBedrockCredentials();

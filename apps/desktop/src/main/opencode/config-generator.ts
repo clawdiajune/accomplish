@@ -464,10 +464,11 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     ollama: 'ollama',
     openrouter: 'openrouter',
     litellm: 'litellm',
+    minimax: 'minimax',
   };
 
   // Build enabled providers list from new settings or fall back to base providers
-  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'amazon-bedrock'];
+  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'amazon-bedrock', 'minimax'];
   let enabledProviders = baseProviders;
 
   // If we have connected providers in the new settings, use those
@@ -869,6 +870,15 @@ export async function syncApiKeysToOpenCodeAuth(): Promise<void> {
       auth['zai-coding-plan'] = { type: 'api', key: apiKeys.zai };
       updated = true;
       console.log('[OpenCode Auth] Synced Z.AI Coding Plan API key');
+    }
+  }
+
+  // Sync MiniMax API key
+  if (apiKeys.minimax) {
+    if (!auth.minimax || auth.minimax.key !== apiKeys.minimax) {
+      auth.minimax = { type: 'api', key: apiKeys.minimax };
+      updated = true;
+      console.log('[OpenCode Auth] Synced MiniMax API key');
     }
   }
 
