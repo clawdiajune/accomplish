@@ -689,53 +689,45 @@ export default function ExecutionPage() {
 
             <AnimatePresence>
               {currentTask.status === 'running' && !permissionRequest && (
-                <>
-                  {/* Browser Script Card - show when browser_script tool is running */}
-                  {currentTool?.endsWith('browser_script') && (currentToolInput as { actions?: unknown[] })?.actions ? (
-                    <BrowserScriptCard
-                      actions={(currentToolInput as { actions: Array<{ action: string; url?: string; selector?: string; ref?: string; text?: string; key?: string }> }).actions}
-                      isRunning={true}
-                    />
-                  ) : (
-                    /* Default thinking indicator */
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -8 }}
-                      transition={springs.gentle}
-                      className="flex flex-col gap-1 text-muted-foreground py-2"
-                      data-testid="execution-thinking-indicator"
-                    >
-                      <div className="flex items-center gap-2">
-                        <SpinningIcon className="h-4 w-4" />
-                        <span className="text-sm">
-                          {currentTool
-                            ? ((currentToolInput as { description?: string })?.description || TOOL_PROGRESS_MAP[currentTool]?.label || currentTool)
-                            : (startupStageTaskId === id && startupStage)
-                              ? startupStage.message
-                              : 'Thinking...'}
-                        </span>
-                        {currentTool && !(currentToolInput as { description?: string })?.description && (
-                          <span className="text-xs text-muted-foreground/60">
-                            ({currentTool})
-                          </span>
-                        )}
-                        {/* Elapsed time - only show during startup stages */}
-                        {!currentTool && startupStageTaskId === id && startupStage && (
-                          <span className="text-xs text-muted-foreground/60">
-                            ({elapsedTime}s)
-                          </span>
-                        )}
-                      </div>
-                      {/* Cold start hint */}
-                      {!currentTool && startupStageTaskId === id && startupStage?.isFirstTask && startupStage.stage === 'browser' && (
-                        <span className="text-xs text-muted-foreground/50 ml-6">
-                          First task takes a bit longer...
+                /* Skip thinking indicator for browser_script - it's shown in the message bubble */
+                currentTool?.endsWith('browser_script') ? null : (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={springs.gentle}
+                    className="flex flex-col gap-1 text-muted-foreground py-2"
+                    data-testid="execution-thinking-indicator"
+                  >
+                    <div className="flex items-center gap-2">
+                      <SpinningIcon className="h-4 w-4" />
+                      <span className="text-sm">
+                        {currentTool
+                          ? ((currentToolInput as { description?: string })?.description || TOOL_PROGRESS_MAP[currentTool]?.label || currentTool)
+                          : (startupStageTaskId === id && startupStage)
+                            ? startupStage.message
+                            : 'Thinking...'}
+                      </span>
+                      {currentTool && !(currentToolInput as { description?: string })?.description && (
+                        <span className="text-xs text-muted-foreground/60">
+                          ({currentTool})
                         </span>
                       )}
-                    </motion.div>
-                  )}
-                </>
+                      {/* Elapsed time - only show during startup stages */}
+                      {!currentTool && startupStageTaskId === id && startupStage && (
+                        <span className="text-xs text-muted-foreground/60">
+                          ({elapsedTime}s)
+                        </span>
+                      )}
+                    </div>
+                    {/* Cold start hint */}
+                    {!currentTool && startupStageTaskId === id && startupStage?.isFirstTask && startupStage.stage === 'browser' && (
+                      <span className="text-xs text-muted-foreground/50 ml-6">
+                        First task takes a bit longer...
+                      </span>
+                    )}
+                  </motion.div>
+                )
               )}
             </AnimatePresence>
 
