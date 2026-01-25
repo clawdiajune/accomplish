@@ -58,7 +58,18 @@ class LogFileWriter {
    * Write a log entry
    */
   write(level: LogLevel, source: LogSource, message: string): void {
-    if (this.fileSizeExceeded) return;
+    // Check for date change to reset file size limit on new day
+    if (this.fileSizeExceeded) {
+      const today = new Date().toISOString().split('T')[0];
+      if (today !== this.currentDate) {
+        // New day - reset and switch to new file
+        this.currentDate = today;
+        this.currentFilePath = path.join(this.logDir, `app-${today}.log`);
+        this.fileSizeExceeded = false;
+      } else {
+        return; // Still same day and size exceeded
+      }
+    }
 
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
