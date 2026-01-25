@@ -88,18 +88,20 @@ export class CompletionEnforcer {
       remaining_work: args?.remaining_work,
     };
 
-    this.state.recordCompleteTaskCall(completeTaskArgs);
-
-    // If claiming success but have incomplete todos, treat as needing continuation
+    // If claiming success but have incomplete todos, downgrade to partial BEFORE recording state
+    // This ensures the state machine enters the partial continuation path instead of success/verification
     if (completeTaskArgs.status === 'success' && this.hasIncompleteTodos()) {
       this.callbacks.onDebug(
         'incomplete_todos',
-        'Agent claimed success but has incomplete todos',
+        'Agent claimed success but has incomplete todos - downgrading to partial',
         { incompleteTodos: this.getIncompleteTodosSummary() }
       );
-      // Override to trigger continuation
+      // Downgrade status to partial and set remaining work
+      completeTaskArgs.status = 'partial';
       completeTaskArgs.remaining_work = this.getIncompleteTodosSummary();
     }
+
+    this.state.recordCompleteTaskCall(completeTaskArgs);
 
     this.callbacks.onDebug(
       'complete_task',

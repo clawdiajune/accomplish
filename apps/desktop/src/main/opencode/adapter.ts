@@ -851,6 +851,17 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           this.completionEnforcer.handleCompleteTaskDetection(toolInput);
         }
 
+        // Detect todowrite tool calls and emit todo state
+        // Built-in tool name is 'todowrite', MCP-prefixed would be '*_todowrite'
+        if (toolName === 'todowrite' || toolName.endsWith('_todowrite')) {
+          const input = toolInput as { todos?: TodoItem[] };
+          if (input?.todos && Array.isArray(input.todos)) {
+            this.emit('todo:update', input.todos);
+            // Also update completion enforcer
+            this.completionEnforcer.updateTodos(input.todos);
+          }
+        }
+
         this.emit('tool-use', toolName, toolInput);
         this.emit('progress', {
           stage: 'tool-use',
