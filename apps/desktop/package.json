@@ -37,7 +37,12 @@
     "test:e2e:native:debug": "playwright test --config=e2e/playwright.config.ts --debug",
     "test:e2e:native:fast": "playwright test --config=e2e/playwright.config.ts --project=electron-fast",
     "test:e2e:native:integration": "playwright test --config=e2e/playwright.config.ts --project=electron-integration",
-    "test:local-agent": "npx tsx scripts/test-local-agent-cli.ts"
+    "test:local-agent": "npx tsx scripts/test-local-agent-cli.ts",
+    "test:sanity": "playwright test --config=sanity-tests/playwright.sanity.config.ts",
+    "test:sanity:opus": "MODEL_FILTER=anthropic pnpm test:sanity",
+    "test:sanity:openai": "MODEL_FILTER=openai pnpm test:sanity",
+    "test:sanity:google": "MODEL_FILTER=google pnpm test:sanity",
+    "test:sanity:quick": "MODEL_FILTER=anthropic TASK_FILTER=web-scraping pnpm test:sanity"
   },
   "dependencies": {
     "@accomplish/shared": "workspace:*",
