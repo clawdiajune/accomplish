@@ -111,7 +111,6 @@ export default function ExecutionPage() {
   const debugPanelRef = useRef<HTMLDivElement>(null);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [customResponse, setCustomResponse] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
 
@@ -381,9 +380,9 @@ export default function ExecutionPage() {
   const handlePermissionResponse = async (allowed: boolean) => {
     if (!permissionRequest || !currentTask) return;
 
-    // For questions, handle custom text response
+    // For questions, handle custom text response (mutually exclusive: text OR options)
     const isQuestion = permissionRequest.type === 'question';
-    const hasCustomText = isQuestion && showCustomInput && customResponse.trim();
+    const hasCustomText = isQuestion && customResponse.trim();
 
     await respondToPermission({
       requestId: permissionRequest.id,
@@ -396,7 +395,6 @@ export default function ExecutionPage() {
     // Reset state for next question
     setSelectedOptions([]);
     setCustomResponse('');
-    setShowCustomInput(false);
 
     // If denied on a question, also interrupt the task
     if (!allowed && isQuestion) {
@@ -902,73 +900,71 @@ export default function ExecutionPage() {
                         </p>
 
                         {/* Options list */}
-                        {!showCustomInput && permissionRequest.options && permissionRequest.options.length > 0 && (
+                        {permissionRequest.options && permissionRequest.options.length > 0 && (
                           <div className="mb-4 space-y-2">
-                            {permissionRequest.options.map((option, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  // If "Other" is selected, show custom input
-                                  if (option.label.toLowerCase() === 'other') {
-                                    setShowCustomInput(true);
-                                    setSelectedOptions([]);
-                                    return;
-                                  }
-                                  if (permissionRequest.multiSelect) {
-                                    setSelectedOptions((prev) =>
-                                      prev.includes(option.label)
-                                        ? prev.filter((o) => o !== option.label)
-                                        : [...prev, option.label]
-                                    );
-                                  } else {
-                                    setSelectedOptions([option.label]);
-                                  }
-                                }}
-                                className={cn(
-                                  "w-full text-left p-3 rounded-lg border transition-colors",
-                                  selectedOptions.includes(option.label)
-                                    ? "border-primary bg-primary/10"
-                                    : "border-border hover:border-primary/50"
-                                )}
-                              >
-                                <div className="font-medium text-sm">{option.label}</div>
-                                {option.description && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    {option.description}
-                                  </div>
-                                )}
-                              </button>
-                            ))}
+                            {permissionRequest.options
+                              .filter((opt) => opt.label.toLowerCase() !== 'other')
+                              .map((option, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    setCustomResponse(''); // Clear text when selecting option
+                                    if (permissionRequest.multiSelect) {
+                                      setSelectedOptions((prev) =>
+                                        prev.includes(option.label)
+                                          ? prev.filter((o) => o !== option.label)
+                                          : [...prev, option.label]
+                                      );
+                                    } else {
+                                      setSelectedOptions([option.label]);
+                                    }
+                                  }}
+                                  className={cn(
+                                    "w-full text-left p-3 rounded-lg border transition-colors",
+                                    selectedOptions.includes(option.label)
+                                      ? "border-primary bg-primary/10"
+                                      : "border-border hover:border-primary/50"
+                                  )}
+                                >
+                                  <div className="font-medium text-sm">{option.label}</div>
+                                  {option.description && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {option.description}
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
                           </div>
                         )}
 
-                        {/* Custom text input */}
-                        {showCustomInput && (
-                          <div className="mb-4 space-y-2">
-                            <Input
-                              autoFocus
-                              value={customResponse}
-                              onChange={(e) => setCustomResponse(e.target.value)}
-                              placeholder="Type your response..."
-                              onKeyDown={(e) => {
-                                // Ignore Enter during IME composition (Chinese/Japanese input)
-                                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                                if (e.key === 'Enter' && customResponse.trim()) {
-                                  handlePermissionResponse(true);
-                                }
-                              }}
-                            />
-                            <button
-                              onClick={() => {
-                                setShowCustomInput(false);
-                                setCustomResponse('');
-                              }}
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              ← Back to options
-                            </button>
+                        {/* Divider */}
+                        {permissionRequest.options && permissionRequest.options.length > 0 && (
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="flex-1 h-px bg-border" />
+                            <span className="text-xs text-muted-foreground">or type your own</span>
+                            <div className="flex-1 h-px bg-border" />
                           </div>
                         )}
+
+                        {/* Always-visible custom text input */}
+                        <div className="mb-4">
+                          <Input
+                            value={customResponse}
+                            onChange={(e) => {
+                              setSelectedOptions([]); // Clear options when typing
+                              setCustomResponse(e.target.value);
+                            }}
+                            placeholder="Enter a different option..."
+                            aria-label="Custom response"
+                            onKeyDown={(e) => {
+                              // Ignore Enter during IME composition (Chinese/Japanese input)
+                              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                              if (e.key === 'Enter' && customResponse.trim()) {
+                                handlePermissionResponse(true);
+                              }
+                            }}
+                          />
+                        </div>
                       </>
                     )}
 
@@ -1007,9 +1003,8 @@ export default function ExecutionPage() {
                         data-testid="permission-allow-button"
                         disabled={
                           permissionRequest.type === 'question' &&
-                          !showCustomInput &&
-                          permissionRequest.options &&
-                          selectedOptions.length === 0
+                          selectedOptions.length === 0 &&
+                          !customResponse.trim()
                         }
                       >
                         {isDeleteOperation(permissionRequest)
