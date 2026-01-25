@@ -29,17 +29,20 @@ async function setContent(html: string): Promise<void> {
   await page.setContent(html, { waitUntil: "domcontentloaded" });
 }
 
-async function getSnapshot(): Promise<string> {
+async function getSnapshot(options?: { maxTokens?: number; maxElements?: number; viewportOnly?: boolean }): Promise<string> {
   const script = getSnapshotScript();
-  return await page.evaluate((s: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = globalThis as any;
-    if (!w.__devBrowser_getAISnapshot) {
-      // eslint-disable-next-line no-eval
-      eval(s);
-    }
-    return w.__devBrowser_getAISnapshot();
-  }, script);
+  return await page.evaluate(
+    ({ s, opts }: { s: string; opts?: { maxTokens?: number; maxElements?: number; viewportOnly?: boolean } }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = globalThis as any;
+      if (!w.__devBrowser_getAISnapshot) {
+        // eslint-disable-next-line no-eval
+        eval(s);
+      }
+      return w.__devBrowser_getAISnapshot(opts);
+    },
+    { s: script, opts: options }
+  );
 }
 
 async function selectRef(ref: string): Promise<unknown> {
@@ -219,5 +222,54 @@ describe("ARIA Snapshot", () => {
     const snapshot = await getSnapshot();
 
     expect(snapshot).toContain("[checked]");
+  });
+
+  test("should truncate to maxElements with priority", async () => {
+    // Navigate to a page with many elements
+    await setContent(`
+      <html>
+        <body>
+          ${Array.from({ length: 100 }, (_, i) => `<button>Button ${i}</button>`).join("")}
+          ${Array.from({ length: 100 }, (_, i) => `<a href="#">Link ${i}</a>`).join("")}
+        </body>
+      </html>
+    `);
+
+    // Call the snapshot function with maxElements
+    const snapshot = await getSnapshot({ maxElements: 50 });
+
+    // Should include truncation header
+    expect(snapshot).toContain("# Elements:");
+    expect(snapshot).toContain("of 200");
+
+    // Should have at most 50 element lines (plus header)
+    const elementLines = snapshot.split("\n").filter((line: string) => line.match(/^\s*-\s+\w+/));
+    expect(elementLines.length).toBeLessThanOrEqual(50);
+
+    // Should prioritize buttons over links (buttons have higher priority)
+    const buttonCount = elementLines.filter((line: string) => line.includes("button")).length;
+    const linkCount = elementLines.filter((line: string) => line.includes("link")).length;
+    expect(buttonCount).toBeGreaterThanOrEqual(linkCount);
+  });
+
+  test("should respect maxTokens budget", async () => {
+    // Create page with many elements
+    await setContent(`
+      <html>
+        <body>
+          ${Array.from({ length: 500 }, (_, i) => `<button>Button with a moderately long name ${i}</button>`).join("")}
+        </body>
+      </html>
+    `);
+
+    // Request small token budget
+    const snapshot = await getSnapshot({ maxTokens: 2000 });
+
+    // Should have token info in header
+    expect(snapshot).toContain("# Tokens:");
+
+    // Estimate actual tokens (rough approximation: ~4 chars per token)
+    const estimatedTokens = Math.ceil(snapshot.length / 4);
+    expect(estimatedTokens).toBeLessThanOrEqual(2500); // Allow some overhead
   });
 });
