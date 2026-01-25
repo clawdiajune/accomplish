@@ -384,14 +384,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: Openwork-macOS-arm64
-          path: ./release/mac-arm64
+          path: ./release/arm64
 
       - name: Download macOS x64 artifacts
         if: needs.build-mac-x64.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: Openwork-macOS-x64
-          path: ./release/mac-x64
+          path: ./release/x64
 
       - name: Download Windows x64 artifacts
         if: needs.build-windows-x64.result == 'success'
@@ -413,7 +413,10 @@ jobs:
           draft: false
           prerelease: ${{ steps.check.outputs.dry_run == 'true' }}
           generate_release_notes: true
-          files: ./release/**/*
+          files: |
+            ./release/arm64/*
+            ./release/x64/*
+            ./release/win-x64/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
