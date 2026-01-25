@@ -129,23 +129,36 @@ function buildMcpCommand(scriptPath: string): string[] {
  * environment passed to MCP servers. This ensures that when `npx.cmd` tries
  * to run `node`, it finds the bundled version.
  *
+ * ## Important: Return undefined when empty
+ *
+ * Returning an empty object `{}` is different from returning `undefined`.
+ * OpenCode CLI interprets `environment: {}` as "use empty environment",
+ * which breaks process inheritance. We return `undefined` when there's
+ * nothing to add so the field is omitted from the config.
+ *
  * @param additionalEnv - Additional environment variables for this MCP server
- * @returns Environment object with PATH properly configured
+ * @returns Environment object with PATH properly configured, or undefined if no env needed
  */
-function buildMcpEnvironment(additionalEnv: Record<string, string> = {}): Record<string, string> {
-  const env: Record<string, string> = { ...additionalEnv };
-
-  // On Windows, ensure bundled Node.js bin is in PATH
-  // This is critical for npx.cmd to find node when it executes
+function buildMcpEnvironment(additionalEnv?: Record<string, string>): Record<string, string> | undefined {
+  // On Windows, we always need to add bundled Node.js to PATH
   if (process.platform === 'win32') {
     const bundledPaths = getBundledNodePaths();
     if (bundledPaths) {
       const existingPath = process.env.PATH || '';
-      env.PATH = `${bundledPaths.binDir};${existingPath}`;
+      return {
+        ...additionalEnv,
+        PATH: `${bundledPaths.binDir};${existingPath}`,
+      };
     }
   }
 
-  return env;
+  // On Mac/Linux: only return environment if there are additional env vars
+  // Return undefined if empty - this preserves parent environment inheritance
+  if (additionalEnv && Object.keys(additionalEnv).length > 0) {
+    return additionalEnv;
+  }
+
+  return undefined;
 }
 
 const ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE = `<identity>
@@ -441,6 +454,63 @@ interface OpenCodeConfig {
   agent?: Record<string, AgentConfig>;
   mcp?: Record<string, McpServerConfig>;
   provider?: Record<string, ProviderConfig>;
+}
+
+/**
+ * Build MCP servers configuration object.
+ *
+ * Separates MCP config building to handle conditional environment fields cleanly.
+ * On Mac, servers without custom env vars should have NO environment field (undefined).
+ * On Windows, all servers need PATH set to find bundled Node.js.
+ */
+function buildMcpServersConfig(
+  skillsPath: string,
+  filePermissionServerPath: string
+): Record<string, McpServerConfig> {
+  // Pre-compute environment for servers that don't have custom env vars
+  // This is only set on Windows (adds PATH), undefined on Mac
+  const baseEnv = buildMcpEnvironment();
+
+  // Environment for servers with custom env vars (always defined)
+  const filePermissionEnv = buildMcpEnvironment({
+    PERMISSION_API_PORT: String(PERMISSION_API_PORT),
+  });
+  const askUserQuestionEnv = buildMcpEnvironment({
+    QUESTION_API_PORT: String(QUESTION_API_PORT),
+  });
+
+  return {
+    'file-permission': {
+      type: 'local',
+      command: buildMcpCommand(filePermissionServerPath),
+      enabled: true,
+      environment: filePermissionEnv,
+      timeout: 30000,
+    },
+    'ask-user-question': {
+      type: 'local',
+      command: buildMcpCommand(path.join(skillsPath, 'ask-user-question', 'src', 'index.ts')),
+      enabled: true,
+      environment: askUserQuestionEnv,
+      timeout: 30000,
+    },
+    'dev-browser-mcp': {
+      type: 'local',
+      command: buildMcpCommand(path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')),
+      enabled: true,
+      // Only include environment field if there's something to set (Windows only)
+      ...(baseEnv && { environment: baseEnv }),
+      timeout: 30000,
+    },
+    // Provides complete_task tool - agent must call to signal task completion
+    'complete-task': {
+      type: 'local',
+      command: buildMcpCommand(path.join(skillsPath, 'complete-task', 'src', 'index.ts')),
+      enabled: true,
+      ...(baseEnv && { environment: baseEnv }),
+      timeout: 30000,
+    },
+  };
 }
 
 /**
@@ -831,41 +901,8 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     // MCP servers for additional tools
     // Timeout set to 30000ms to handle slow npx startup on Windows
     // Uses buildMcpCommand() for Windows compatibility - see function docs for details
-    mcp: {
-      'file-permission': {
-        type: 'local',
-        command: buildMcpCommand(filePermissionServerPath),
-        enabled: true,
-        environment: buildMcpEnvironment({
-          PERMISSION_API_PORT: String(PERMISSION_API_PORT),
-        }),
-        timeout: 30000,
-      },
-      'ask-user-question': {
-        type: 'local',
-        command: buildMcpCommand(path.join(skillsPath, 'ask-user-question', 'src', 'index.ts')),
-        enabled: true,
-        environment: buildMcpEnvironment({
-          QUESTION_API_PORT: String(QUESTION_API_PORT),
-        }),
-        timeout: 30000,
-      },
-      'dev-browser-mcp': {
-        type: 'local',
-        command: buildMcpCommand(path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')),
-        enabled: true,
-        environment: buildMcpEnvironment(),
-        timeout: 30000,
-      },
-      // Provides complete_task tool - agent must call to signal task completion
-      'complete-task': {
-        type: 'local',
-        command: buildMcpCommand(path.join(skillsPath, 'complete-task', 'src', 'index.ts')),
-        enabled: true,
-        environment: buildMcpEnvironment(),
-        timeout: 30000,
-      },
-    },
+    // Uses buildMcpEnvironment() to add bundled Node.js to PATH on Windows
+    mcp: buildMcpServersConfig(skillsPath, filePermissionServerPath),
   };
 
   // Write config file
