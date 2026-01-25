@@ -105,6 +105,136 @@ let connectingPromise: Promise<Browser> | null = null;
 let cachedServerMode: string | null = null;
 // Active page override for tab switching (dev-browser server doesn't track this)
 let activePageOverride: Page | null = null;
+// Track the page that currently has the active glow effect
+let glowingPage: Page | null = null;
+
+// Track pages with navigation listeners to avoid duplicates
+const pagesWithGlowListeners = new WeakSet<Page>();
+
+/**
+ * Inject the glow CSS/DOM into the page
+ */
+async function injectGlowElements(page: Page): Promise<void> {
+  if (page.isClosed()) return;
+
+  try {
+    await page.evaluate(() => {
+    // Remove existing glow if any
+    document.getElementById('__dev-browser-active-glow')?.remove();
+    document.getElementById('__dev-browser-active-glow-style')?.remove();
+
+    // Create style element for keyframes - cycles through colors with enhanced visibility
+    const style = document.createElement('style');
+    style.id = '__dev-browser-active-glow-style';
+    style.textContent = `
+      @keyframes devBrowserGlowColor {
+        0%, 100% {
+          border-color: rgba(59, 130, 246, 0.9);
+          box-shadow:
+            inset 0 0 30px rgba(59, 130, 246, 0.6),
+            inset 0 0 60px rgba(59, 130, 246, 0.3),
+            0 0 20px rgba(59, 130, 246, 0.4);
+        }
+        25% {
+          border-color: rgba(168, 85, 247, 0.9);
+          box-shadow:
+            inset 0 0 30px rgba(168, 85, 247, 0.6),
+            inset 0 0 60px rgba(168, 85, 247, 0.3),
+            0 0 20px rgba(168, 85, 247, 0.4);
+        }
+        50% {
+          border-color: rgba(236, 72, 153, 0.9);
+          box-shadow:
+            inset 0 0 30px rgba(236, 72, 153, 0.6),
+            inset 0 0 60px rgba(236, 72, 153, 0.3),
+            0 0 20px rgba(236, 72, 153, 0.4);
+        }
+        75% {
+          border-color: rgba(34, 211, 238, 0.9);
+          box-shadow:
+            inset 0 0 30px rgba(34, 211, 238, 0.6),
+            inset 0 0 60px rgba(34, 211, 238, 0.3),
+            0 0 20px rgba(34, 211, 238, 0.4);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Create enhanced glow overlay - thicker border, stronger effect
+    const overlay = document.createElement('div');
+    overlay.id = '__dev-browser-active-glow';
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2147483647;
+      border: 5px solid rgba(59, 130, 246, 0.9);
+      border-radius: 4px;
+      box-shadow:
+        inset 0 0 30px rgba(59, 130, 246, 0.6),
+        inset 0 0 60px rgba(59, 130, 246, 0.3),
+        0 0 20px rgba(59, 130, 246, 0.4);
+      animation: devBrowserGlowColor 6s ease-in-out infinite;
+    `;
+    document.body.appendChild(overlay);
+  });
+  } catch (err) {
+    console.error('[dev-browser-mcp] Error injecting glow elements:', err);
+  }
+}
+
+/**
+ * Inject active tab glow effect into a page (with navigation listener)
+ */
+async function injectActiveTabGlow(page: Page): Promise<void> {
+  // Remove glow from previous page if different
+  if (glowingPage && glowingPage !== page && !glowingPage.isClosed()) {
+    await removeActiveTabGlow(glowingPage);
+  }
+
+  glowingPage = page;
+
+  // Inject glow elements now
+  await injectGlowElements(page);
+
+  // Set up listener to re-inject glow after navigation (only once per page)
+  if (!pagesWithGlowListeners.has(page)) {
+    pagesWithGlowListeners.add(page);
+
+    page.on('load', async () => {
+      // Re-inject glow if this page is still the active glowing page
+      if (glowingPage === page && !page.isClosed()) {
+        console.error('[dev-browser-mcp] Page navigated, re-injecting glow...');
+        await injectGlowElements(page);
+      }
+    });
+  }
+}
+
+/**
+ * Remove active tab glow effect from a page
+ */
+async function removeActiveTabGlow(page: Page): Promise<void> {
+  if (page.isClosed()) {
+    if (glowingPage === page) {
+      glowingPage = null;
+    }
+    return;
+  }
+
+  try {
+    await page.evaluate(() => {
+      document.getElementById('__dev-browser-active-glow')?.remove();
+      document.getElementById('__dev-browser-active-glow-style')?.remove();
+    });
+  } catch {
+    // Page may have been closed or navigated, ignore errors
+  }
+
+  if (glowingPage === page) {
+    glowingPage = null;
+  }
+}
 
 /**
  * Fetch with retry for handling concurrent connection issues
@@ -158,6 +288,36 @@ async function ensureConnected(): Promise<Browser> {
       // Cache the server mode once at connection time
       cachedServerMode = info.mode || 'normal';
       browser = await chromium.connectOverCDP(info.wsEndpoint);
+
+      // Set up listener for new pages - auto-inject glow when tabs open
+      for (const context of browser.contexts()) {
+        context.on('page', async (page) => {
+          console.error('[dev-browser-mcp] New page detected, injecting glow immediately...');
+          // Small delay to ensure page has a body element, then inject
+          setTimeout(async () => {
+            try {
+              if (!page.isClosed()) {
+                await injectActiveTabGlow(page);
+                console.error('[dev-browser-mcp] Glow injected on new page');
+              }
+            } catch (err) {
+              console.error('[dev-browser-mcp] Failed to inject glow on new page:', err);
+            }
+          }, 100);
+        });
+
+        // Also inject glow on existing pages
+        for (const page of context.pages()) {
+          if (!page.isClosed() && !glowingPage) {
+            try {
+              await injectActiveTabGlow(page);
+            } catch (err) {
+              console.error('[dev-browser-mcp] Failed to inject glow on existing page:', err);
+            }
+          }
+        }
+      }
+
       return browser;
     } finally {
       connectingPromise = null;
@@ -1358,6 +1518,11 @@ interface BrowserCanvasTypeInput {
   page_name?: string;
 }
 
+interface BrowserHighlightInput {
+  enabled: boolean;
+  page_name?: string;
+}
+
 // Create MCP server
 const server = new Server(
   { name: 'dev-browser-mcp', version: '1.0.0' },
@@ -1979,6 +2144,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['text'],
       },
     },
+    {
+      name: 'browser_highlight',
+      description: 'Toggle the visual highlight glow on the current tab. Use to indicate when automation is active on a tab, and turn off when done.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          enabled: {
+            type: 'boolean',
+            description: 'true to show the highlight glow, false to hide it',
+          },
+          page_name: {
+            type: 'string',
+            description: 'Optional page name (default: "main")',
+          },
+        },
+        required: ['enabled'],
+      },
+    },
   ],
 }));
 
@@ -2005,6 +2188,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
         const page = await getPage(page_name);
         await page.goto(fullUrl);
         await waitForPageLoad(page);
+        await injectActiveTabGlow(page);  // Add visual indicator for active tab
 
         const title = await page.title();
         const currentUrl = page.url();
@@ -3170,6 +3354,7 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
           const targetPage = allPages[index]!;
           await targetPage.bringToFront();
           activePageOverride = targetPage;  // Set the override so getPage() returns this tab
+          await injectActiveTabGlow(targetPage);  // Add visual indicator for active tab
           return {
             content: [{ type: 'text', text: `Switched to tab ${index}: ${targetPage.url()}\n\nNow use browser_snapshot() to see the content of this tab.` }],
           };
@@ -3216,6 +3401,8 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
             await newPage.waitForLoadState('domcontentloaded');
             const allPages = context.pages();
             const newIndex = allPages.indexOf(newPage);
+            activePageOverride = newPage;  // Set the new tab as active
+            await injectActiveTabGlow(newPage);  // Add visual indicator for new tab
             return {
               content: [{ type: 'text', text: `New tab opened at index ${newIndex}: ${newPage.url()}` }],
             };
@@ -3264,6 +3451,23 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
         };
       }
 
+      case 'browser_highlight': {
+        const { enabled, page_name } = args as BrowserHighlightInput;
+        const page = await getPage(page_name);
+
+        if (enabled) {
+          await injectActiveTabGlow(page);
+          return {
+            content: [{ type: 'text', text: 'Highlight enabled - tab now shows color-cycling glow border' }],
+          };
+        } else {
+          await removeActiveTabGlow(page);
+          return {
+            content: [{ type: 'text', text: 'Highlight disabled - glow removed from tab' }],
+          };
+        }
+      }
+
       default:
         return {
           content: [{ type: 'text', text: `Error: Unknown tool: ${name}` }],
@@ -3287,6 +3491,15 @@ async function main() {
   await server.connect(transport);
   console.error('[dev-browser-mcp] Server connected successfully!');
   console.error('[dev-browser-mcp] MCP Server ready and listening for tool calls');
+
+  // Connect to browser immediately to set up page listeners for auto-glow
+  console.error('[dev-browser-mcp] Connecting to browser for auto-glow setup...');
+  try {
+    await ensureConnected();
+    console.error('[dev-browser-mcp] Browser connected, page listeners active');
+  } catch (err) {
+    console.error('[dev-browser-mcp] Could not connect to browser yet (will retry on first tool call):', err);
+  }
 }
 
 console.error('[dev-browser-mcp] Calling main()...');
