@@ -720,6 +720,7 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
       },
     },
     // MCP servers for additional tools
+    // Timeout set to 30000ms to handle slow npx startup on Windows
     mcp: {
       'file-permission': {
         type: 'local',
@@ -728,7 +729,7 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
         environment: {
           PERMISSION_API_PORT: String(PERMISSION_API_PORT),
         },
-        timeout: 10000,
+        timeout: 30000,
       },
       'ask-user-question': {
         type: 'local',
@@ -737,13 +738,13 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
         environment: {
           QUESTION_API_PORT: String(QUESTION_API_PORT),
         },
-        timeout: 10000,
+        timeout: 30000,
       },
       'dev-browser-mcp': {
         type: 'local',
         command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
         enabled: true,
-        timeout: 30000,  // Longer timeout for browser operations
+        timeout: 30000,
       },
     },
   };
