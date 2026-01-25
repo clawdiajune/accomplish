@@ -101,7 +101,7 @@ import {
 } from '../test-utils/mock-task-flow';
 
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm']);
+const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
 interface OllamaModel {
@@ -1057,7 +1057,7 @@ export function registerIPCHandlers(): void {
             API_KEY_VALIDATION_TIMEOUT_MS
           );
 
-          // If max_completion_tokens not supported, try max_tokens (older models)
+           // If max_completion_tokens not supported, try max_tokens (older models)
           if (!response.ok) {
             const firstErrorData = await response.json().catch(() => ({}));
             const firstErrorMessage = (firstErrorData as { error?: { message?: string } })?.error?.message || '';
@@ -1083,6 +1083,27 @@ export function registerIPCHandlers(): void {
               return { valid: false, error: firstErrorMessage || `API returned status ${response.status}` };
             }
           }
+          
+        case 'minimax':
+          // MiniMax uses Anthropic-compatible API
+          response = await fetchWithTimeout(
+            'https://api.minimax.io/anthropic/v1/messages',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sanitizedKey}`,
+                'anthropic-version': '2023-06-01',
+              },
+              body: JSON.stringify({
+                model: 'MiniMax-M2',
+                max_tokens: 1,
+                messages: [{ role: 'user', content: 'test' }],
+              }),
+            },
+            API_KEY_VALIDATION_TIMEOUT_MS
+          );
+
           break;
 
         default:
