@@ -19,6 +19,11 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// On Windows, spawnSync needs shell:true to find executables in PATH
+// This is because Windows doesn't have the same PATH resolution as Unix
+const isWindows = process.platform === 'win32';
+const spawnOptions = { encoding: 'utf-8', shell: isWindows };
+
 // Hardcoded list of skills to deploy
 // These names must match directory names in apps/desktop/skills/
 const skills = [
@@ -59,7 +64,7 @@ function validateSkillName(skill) {
 
 // Verify pnpm is available
 console.log('Checking pnpm availability...');
-const pnpmCheck = spawnSync('pnpm', ['--version'], { encoding: 'utf-8' });
+const pnpmCheck = spawnSync('pnpm', ['--version'], spawnOptions);
 if (pnpmCheck.error || pnpmCheck.status !== 0) {
   console.error('ERROR: pnpm is not installed or not in PATH.');
   console.error('Please install pnpm: npm install -g pnpm');
@@ -131,10 +136,12 @@ for (const skill of skills) {
   try {
     // Run pnpm deploy from monorepo root using spawnSync (safer than execSync with string template)
     // --prod: only install production dependencies
+    // shell: isWindows is needed for Windows to find pnpm in PATH
     const result = spawnSync('pnpm', ['deploy', `--filter=${packageName}`, '--prod', skillOutput], {
       cwd: monorepoRoot,
       stdio: 'inherit',
-      encoding: 'utf-8'
+      encoding: 'utf-8',
+      shell: isWindows
     });
 
     if (result.error) {
