@@ -47,7 +47,6 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   private password: string = '';
   private restartAttempts: number = 0;
   private disposed: boolean = false;
-  private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Get the current server state
@@ -201,9 +200,10 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       await this.waitForHealth();
       this.restartAttempts = 0; // Reset on success
 
-      // Create SDK client
+      // Create SDK client with password authentication
       this.client = createOpencodeClient({
         baseUrl: `http://127.0.0.1:${this.port}`,
+        auth: this.password,
       });
 
       this.setState('ready');
@@ -227,7 +227,10 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 1000);
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { 'Authorization': `Bearer ${this.password}` },
+        });
         clearTimeout(timeout);
 
         if (res.ok) {
@@ -275,13 +278,17 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
    * Kill the server process
    */
   private kill(): void {
-    if (this.process) {
+    const proc = this.process;
+    if (proc) {
       try {
-        this.process.kill('SIGTERM');
-        // Force kill after 3 seconds
+        proc.kill('SIGTERM');
+        // Force kill after 3 seconds (uses captured reference to avoid
+        // race with dispose() nullifying this.process)
         setTimeout(() => {
-          if (this.process) {
-            this.process.kill('SIGKILL');
+          try {
+            proc.kill('SIGKILL');
+          } catch {
+            // Process may already be dead
           }
         }, 3000);
       } catch {
@@ -296,11 +303,6 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   async dispose(): Promise<void> {
     this.disposed = true;
 
-    if (this.healthCheckTimer) {
-      clearTimeout(this.healthCheckTimer);
-      this.healthCheckTimer = null;
-    }
-
     // Try graceful shutdown via SDK
     if (this.client && this.state === 'ready') {
       try {
@@ -314,7 +316,8 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       }
     }
 
-    // Force kill if still running
+    // Force kill if still running (kill() captures the process reference
+    // internally so nullifying here is safe)
     this.kill();
 
     this.client = null;

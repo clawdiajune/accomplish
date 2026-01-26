@@ -323,6 +323,18 @@ export function registerIPCHandlers(): void {
       const eventRouter = getEventRouter();
       await eventRouter.subscribe(serverManager.getClient());
 
+      // When the server restarts (crash recovery), update the EventRouter
+      // with the new client so SSE reconnection uses the fresh instance
+      serverManager.on('state-change', (state) => {
+        if (state === 'ready') {
+          try {
+            eventRouter.updateClient(serverManager.getClient());
+          } catch {
+            // Server may not be fully ready yet
+          }
+        }
+      });
+
       serverManagerStarted = true;
     }
 

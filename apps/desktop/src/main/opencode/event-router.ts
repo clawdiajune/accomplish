@@ -77,6 +77,7 @@ export class EventRouter {
   private callbacks: TaskEventCallbacks | null = null;
   private abortController: AbortController | null = null;
   private subscriptionActive = false;
+  private currentClient: OpencodeClient | null = null;
 
   // -------------------------------------------------------------------
   // Public API
@@ -140,11 +141,21 @@ export class EventRouter {
       return;
     }
 
+    this.currentClient = client;
     this.subscriptionActive = true;
     this.abortController = new AbortController();
 
     // Start processing in the background - reconnects on failure
-    void this.processEventStream(client);
+    void this.processEventStream();
+  }
+
+  /**
+   * Update the SDK client reference (e.g. after server restart).
+   * The event stream loop will pick up the new client on next reconnect.
+   */
+  updateClient(client: OpencodeClient): void {
+    this.currentClient = client;
+    console.log('[EventRouter] Client reference updated');
   }
 
   /**
@@ -165,6 +176,7 @@ export class EventRouter {
     this.sessionToTask.clear();
     this.taskToSession.clear();
     this.callbacks = null;
+    this.currentClient = null;
 
     console.log('[EventRouter] Disposed');
   }
@@ -176,10 +188,18 @@ export class EventRouter {
   /**
    * Main event loop — subscribes to the SSE stream and processes events.
    * Reconnects automatically on error until dispose() is called.
+   * Uses this.currentClient which may be updated after server restarts.
    */
-  private async processEventStream(client: OpencodeClient): Promise<void> {
+  private async processEventStream(): Promise<void> {
     while (this.subscriptionActive) {
       try {
+        const client = this.currentClient;
+        if (!client) {
+          console.warn('[EventRouter] No client available, waiting...');
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+
         console.log('[EventRouter] Subscribing to SSE event stream...');
         const result = await client.event.subscribe();
         const stream = result.stream;
