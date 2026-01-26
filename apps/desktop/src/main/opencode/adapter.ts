@@ -89,6 +89,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private waitingTransitionTimer: ReturnType<typeof setTimeout> | null = null;
   /** Whether the first tool has been received (to stop showing startup stages) */
   private hasReceivedFirstTool: boolean = false;
+  /** Whether verification is running (suppress verification session messages) */
+  private isVerifying: boolean = false;
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -115,12 +117,14 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         await this.spawnSessionResumption(prompt);
       },
       onVerificationStart: () => {
+        this.isVerifying = true;
         this.emit('progress', {
           stage: 'verifying',
           message: 'Verifying completion...',
         });
       },
       onVerificationEnd: () => {
+        this.isVerifying = false;
         this.emit('progress', {
           stage: 'verification-complete',
         });
@@ -846,6 +850,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         if (!this.currentSessionId && message.part.sessionID) {
           this.currentSessionId = message.part.sessionID;
         }
+        if (this.isVerifying) {
+          break;
+        }
         this.emit('message', message);
 
         if (message.part.text) {
@@ -942,7 +949,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         // For models that don't emit text messages (like Gemini), emit the tool description
         // as a thinking message so users can see what the AI is doing
         const toolDescription = (toolUseInput as { description?: string })?.description;
-        if (toolDescription) {
+        if (toolDescription && !this.isVerifying) {
           // Create a synthetic text message for the description
           const syntheticTextMessage: OpenCodeMessage = {
             type: 'text',
@@ -960,7 +967,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         }
 
         // Forward to handlers.ts for message processing (screenshots, etc.)
-        this.emit('message', message);
+        if (!this.isVerifying) {
+          this.emit('message', message);
+        }
         const toolUseStatus = toolUseMessage.part.state?.status;
 
         console.log('[OpenCode Adapter] Tool use:', toolUseName, 'status:', toolUseStatus);
