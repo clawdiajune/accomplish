@@ -13,6 +13,9 @@ import {
   disposeTaskManager,
   type TaskCallbacks,
 } from '../opencode/task-manager';
+import { getServerManager } from '../opencode/server-manager';
+import { getEventRouter } from '../opencode/event-router';
+import { generateOpenCodeConfig, syncApiKeysToOpenCodeAuth } from '../opencode/config-generator';
 import {
   getTasks,
   getTask,
@@ -61,19 +64,9 @@ import {
 } from '../store/providerSettings';
 import type { ProviderId, ConnectedProvider, BedrockCredentials } from '@accomplish/shared';
 import { getDesktopConfig } from '../config';
-import {
-  startPermissionApiServer,
-  startQuestionApiServer,
-  initPermissionApi,
-  resolvePermission,
-  resolveQuestion,
-  isFilePermissionRequest,
-  isQuestionRequest,
-} from '../permission-api';
 import type {
   TaskConfig,
   PermissionResponse,
-  OpenCodeMessage,
   TaskMessage,
   TaskResult,
   TaskStatus,
@@ -300,9 +293,8 @@ function handle<Args extends unknown[], ReturnType = unknown>(
 export function registerIPCHandlers(): void {
   const taskManager = getTaskManager();
 
-  // Start the permission API server for file-permission MCP
-  // Initialize when we have a window (deferred until first task:start)
-  let permissionApiInitialized = false;
+  // Track whether the ServerManager has been started (deferred until first task:start)
+  let serverManagerStarted = false;
 
   // Task: Start a new task
   handle('task:start', async (event: IpcMainInvokeEvent, config: TaskConfig) => {
@@ -316,12 +308,22 @@ export function registerIPCHandlers(): void {
       throw new Error('No provider is ready. Please connect a provider and select a model in Settings.');
     }
 
-    // Initialize permission API server (once, when we have a window)
-    if (!permissionApiInitialized) {
-      initPermissionApi(window, () => taskManager.getActiveTaskId());
-      startPermissionApiServer();
-      startQuestionApiServer();
-      permissionApiInitialized = true;
+    // Initialize ServerManager and EventRouter (once, on first real task)
+    if (!serverManagerStarted) {
+      // Generate config and sync API keys so the opencode serve process
+      // picks up the correct provider/model/MCP settings
+      await syncApiKeysToOpenCodeAuth();
+      await generateOpenCodeConfig();
+
+      // Start the opencode serve process and wait for health check
+      const serverManager = getServerManager();
+      await serverManager.start();
+
+      // Subscribe the EventRouter to the SSE event stream
+      const eventRouter = getEventRouter();
+      await eventRouter.subscribe(serverManager.getClient());
+
+      serverManagerStarted = true;
     }
 
     const taskId = createTaskId();
@@ -519,38 +521,10 @@ export function registerIPCHandlers(): void {
     clearHistory();
   });
 
-  // Permission: Respond to permission request
+  // Permission: Respond to permission request (SDK flow)
   handle('permission:respond', async (_event: IpcMainInvokeEvent, response: PermissionResponse) => {
     const parsedResponse = validate(permissionResponseSchema, response);
     const { taskId, decision, requestId } = parsedResponse;
-
-    // Check if this is a file permission request from the MCP server
-    if (requestId && isFilePermissionRequest(requestId)) {
-      const allowed = decision === 'allow';
-      const resolved = resolvePermission(requestId, allowed);
-      if (resolved) {
-        console.log(`[IPC] File permission request ${requestId} resolved: ${allowed ? 'allowed' : 'denied'}`);
-        return;
-      }
-      // If not found in pending, fall through to standard handling
-      console.warn(`[IPC] File permission request ${requestId} not found in pending requests`);
-    }
-
-    // Check if this is a question request from the MCP server
-    if (requestId && isQuestionRequest(requestId)) {
-      const denied = decision === 'deny';
-      const resolved = resolveQuestion(requestId, {
-        selectedOptions: parsedResponse.selectedOptions,
-        customText: parsedResponse.customText,
-        denied,
-      });
-      if (resolved) {
-        console.log(`[IPC] Question request ${requestId} resolved: ${denied ? 'denied' : 'answered'}`);
-        return;
-      }
-      // If not found in pending, fall through to standard handling
-      console.warn(`[IPC] Question request ${requestId} not found in pending requests`);
-    }
 
     // Check if the task is still active
     if (!taskManager.hasActiveTask(taskId)) {
@@ -1966,165 +1940,3 @@ function createMessageId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * Extract base64 screenshots from tool output
- * Returns cleaned text (with images replaced by placeholders) and extracted attachments
- */
-function extractScreenshots(output: string): {
-  cleanedText: string;
-  attachments: Array<{ type: 'screenshot' | 'json'; data: string; label?: string }>;
-} {
-  const attachments: Array<{ type: 'screenshot' | 'json'; data: string; label?: string }> = [];
-
-  // Match data URLs (data:image/png;base64,...)
-  const dataUrlRegex = /data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+/g;
-  let match;
-  while ((match = dataUrlRegex.exec(output)) !== null) {
-    attachments.push({
-      type: 'screenshot',
-      data: match[0],
-      label: 'Browser screenshot',
-    });
-  }
-
-  // Also check for raw base64 PNG (starts with iVBORw0)
-  // This pattern matches PNG base64 that isn't already a data URL
-  const rawBase64Regex = /(?<![;,])(?:^|["\s])?(iVBORw0[A-Za-z0-9+/=]{100,})(?:["\s]|$)/g;
-  while ((match = rawBase64Regex.exec(output)) !== null) {
-    const base64Data = match[1];
-    // Wrap in data URL if it's valid base64 PNG
-    if (base64Data && base64Data.length > 100) {
-      attachments.push({
-        type: 'screenshot',
-        data: `data:image/png;base64,${base64Data}`,
-        label: 'Browser screenshot',
-      });
-    }
-  }
-
-  // Clean the text - replace image data with placeholder
-  let cleanedText = output
-    .replace(dataUrlRegex, '[Screenshot captured]')
-    .replace(rawBase64Regex, '[Screenshot captured]');
-
-  // Also clean up common JSON wrappers around screenshots
-  cleanedText = cleanedText
-    .replace(/"[Screenshot captured]"/g, '"[Screenshot]"')
-    .replace(/\[Screenshot captured\]\[Screenshot captured\]/g, '[Screenshot captured]');
-
-  return { cleanedText, attachments };
-}
-
-/**
- * Sanitize tool output to remove technical details that confuse users
- */
-function sanitizeToolOutput(text: string, isError: boolean): string {
-  let result = text;
-
-  // Strip any remaining ANSI escape codes
-  result = result.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
-  // Also strip any leftover escape sequences that may have been partially matched
-  result = result.replace(/\x1B\[2m|\x1B\[22m|\x1B\[0m/g, '');
-
-  // Remove WebSocket URLs
-  result = result.replace(/ws:\/\/[^\s\]]+/g, '[connection]');
-
-  // Remove "Call log:" sections and everything after
-  result = result.replace(/\s*Call log:[\s\S]*/i, '');
-
-  // Simplify common Playwright/CDP errors for users
-  if (isError) {
-    // Timeout errors: extract just the timeout duration
-    const timeoutMatch = result.match(/timed? ?out after (\d+)ms/i);
-    if (timeoutMatch) {
-      const seconds = Math.round(parseInt(timeoutMatch[1]) / 1000);
-      return `Timed out after ${seconds}s`;
-    }
-
-    // "browserType.connectOverCDP: Protocol error (X): Y" → "Y"
-    const protocolMatch = result.match(/Protocol error \([^)]+\):\s*(.+)/i);
-    if (protocolMatch) {
-      result = protocolMatch[1].trim();
-    }
-
-    // "Error executing code: X" → just the meaningful part
-    result = result.replace(/^Error executing code:\s*/i, '');
-
-    // Clean up "browserType.connectOverCDP:" prefix
-    result = result.replace(/browserType\.connectOverCDP:\s*/i, '');
-
-    // Remove stack traces (lines starting with "at ")
-    result = result.replace(/\s+at\s+.+/g, '');
-
-    // Remove error class names like "CodeExecutionTimeoutError:"
-    result = result.replace(/\w+Error:\s*/g, '');
-  }
-
-  return result.trim();
-}
-
-function toTaskMessage(message: OpenCodeMessage): TaskMessage | null {
-  // OpenCode format: step_start, text, tool_call, tool_use, tool_result, step_finish
-
-  // Handle text content
-  if (message.type === 'text') {
-    if (message.part.text) {
-      return {
-        id: createMessageId(),
-        type: 'assistant',
-        content: message.part.text,
-        timestamp: new Date().toISOString(),
-      };
-    }
-    return null;
-  }
-
-  // Handle tool calls (legacy format - just shows tool is starting)
-  if (message.type === 'tool_call') {
-    return {
-      id: createMessageId(),
-      type: 'tool',
-      content: `Using tool: ${message.part.tool}`,
-      toolName: message.part.tool,
-      toolInput: message.part.input,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  // Handle tool_use messages (combined tool call + result)
-  if (message.type === 'tool_use') {
-    const toolUseMsg = message as import('@accomplish/shared').OpenCodeToolUseMessage;
-    const toolName = toolUseMsg.part.tool || 'unknown';
-    const toolInput = toolUseMsg.part.state?.input;
-    const toolOutput = toolUseMsg.part.state?.output || '';
-    const status = toolUseMsg.part.state?.status;
-
-    // Only create message for completed/error status (not pending/running)
-    if (status === 'completed' || status === 'error') {
-      // Extract screenshots from tool output
-      const { cleanedText, attachments } = extractScreenshots(toolOutput);
-
-      // Sanitize output - more aggressive for errors
-      const isError = status === 'error';
-      const sanitizedText = sanitizeToolOutput(cleanedText, isError);
-
-      // Truncate long outputs for display
-      const displayText = sanitizedText.length > 500
-        ? sanitizedText.substring(0, 500) + '...'
-        : sanitizedText;
-
-      return {
-        id: createMessageId(),
-        type: 'tool',
-        content: displayText || `Tool ${toolName} ${status}`,
-        toolName,
-        toolInput,
-        timestamp: new Date().toISOString(),
-        attachments: attachments.length > 0 ? attachments : undefined,
-      };
-    }
-    return null;
-  }
-
-  return null;
-}

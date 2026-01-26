@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import { registerIPCHandlers } from './ipc/handlers';
 import { flushPendingTasks } from './store/taskHistory';
 import { disposeTaskManager } from './opencode/task-manager';
+import { disposeServerManager } from './opencode/server-manager';
+import { disposeEventRouter } from './opencode/event-router';
 import { checkAndCleanupFreshInstall } from './store/freshInstallCleanup';
 import { initializeDatabase, closeDatabase } from './store/db';
 import { FutureSchemaError } from './store/migrations/errors';
@@ -223,8 +225,14 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   console.log('[Main] App before-quit event fired');
   flushPendingTasks();
-  // Dispose all active tasks and cleanup PTY processes
+  // Dispose all active tasks and cleanup
   disposeTaskManager();
+  // Dispose the EventRouter (stops SSE subscription)
+  disposeEventRouter();
+  // Dispose the ServerManager (stops opencode serve process)
+  disposeServerManager().catch((err) => {
+    console.error('[Main] Failed to dispose ServerManager:', err);
+  });
   // Stop Azure Foundry proxy server if running
   stopAzureFoundryProxy().catch((err) => {
     console.error('[Main] Failed to stop Azure Foundry proxy:', err);
