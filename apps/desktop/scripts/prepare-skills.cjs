@@ -148,8 +148,18 @@ for (const skill of skills) {
       throw new Error(`Failed to spawn pnpm: ${result.error.message}`);
     }
 
+    // On Windows, pnpm deploy may fail with EPERM (4294963248) when creating bin stubs
+    // but the actual deployment succeeds. Check if critical files exist before failing.
     if (result.status !== 0) {
-      throw new Error(`pnpm deploy exited with code ${result.status}`);
+      const nodeModulesExists = fs.existsSync(path.join(skillOutput, 'node_modules'));
+      const packageJsonExists = fs.existsSync(path.join(skillOutput, 'package.json'));
+
+      if (isWindows && nodeModulesExists && packageJsonExists) {
+        console.log(`  WARNING: pnpm deploy exited with code ${result.status} but deployment appears successful`);
+        console.log(`  (This is a known Windows CI issue with bin stub creation - continuing anyway)`);
+      } else {
+        throw new Error(`pnpm deploy exited with code ${result.status}`);
+      }
     }
 
     // Copy the pre-built dist/ directory (esbuild output)
