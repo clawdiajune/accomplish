@@ -2511,15 +2511,15 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
         const page = await getPage(page_name);
 
         // Parse and validate max_elements (1-1000, default 300)
-        // If full_snapshot is true, bypass element limits
+        // If full_snapshot is true, use Infinity to bypass element limits
         const validatedMaxElements = full_snapshot
-          ? undefined
+          ? Infinity
           : Math.min(Math.max(max_elements ?? 300, 1), 1000);
 
         // Parse and validate max_tokens (1000-50000, default 8000)
-        // If full_snapshot is true, bypass token limits
+        // If full_snapshot is true, use Infinity to bypass token limits
         const validatedMaxTokens = full_snapshot
-          ? undefined
+          ? Infinity
           : Math.min(Math.max(max_tokens ?? 8000, 1000), 50000);
 
         const snapshotOptions: SnapshotOptions = {
