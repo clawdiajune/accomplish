@@ -145,7 +145,7 @@ export function StatusBar() {
     : 'All systems ready';
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
+    <div className="fixed bottom-4 right-4 z-50 w-[30%] min-w-[280px] max-w-[400px]">
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -153,9 +153,9 @@ export function StatusBar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.2 }}
-            className="absolute bottom-full left-0 right-0 max-h-[400px] bg-card border-t border-border shadow-lg"
+            className="absolute bottom-full left-0 right-0 mb-1 max-h-[400px] bg-card border border-border rounded-lg shadow-lg"
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30 rounded-t-lg">
               <span className="text-sm font-semibold text-foreground">System Health</span>
               <button
                 className={cn(
@@ -182,8 +182,8 @@ export function StatusBar() {
 
       <button
         className={cn(
-          'w-full flex items-center justify-between px-4 h-8',
-          'bg-card border-t border-border',
+          'w-full flex items-center justify-between px-4 h-9',
+          'bg-card border border-border rounded-lg shadow-sm',
           'hover:bg-muted/30 transition-colors',
           'disabled:cursor-wait'
         )}
