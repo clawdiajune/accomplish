@@ -37,7 +37,7 @@ fi
 
 NODE_DIR="$RESOURCES_DIR/nodejs/$NODE_ARCH"
 NODE_BIN="$NODE_DIR/bin/node"
-SKILLS_DIR="$RESOURCES_DIR/app/skills"
+SKILLS_DIR="$RESOURCES_DIR/skills"
 
 # === Check 1: Bundled Node exists ===
 echo "=== Check 1: Bundled Node exists ==="
