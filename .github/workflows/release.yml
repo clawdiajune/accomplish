@@ -349,8 +349,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: v${{ needs.version-bump.outputs.new_version }}
 
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -383,8 +381,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: v${{ needs.version-bump.outputs.new_version }}
 
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -417,8 +413,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: v${{ needs.version-bump.outputs.new_version }}
 
       - name: Download artifact
         uses: actions/download-artifact@v4
