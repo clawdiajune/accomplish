@@ -209,7 +209,9 @@ jobs:
             $appPath = $unpackedDir.FullName
             Write-Host "Found unpacked directory: $appPath"
           } else {
-            # Extract NSIS installer
+            # Run NSIS installer silently to extract the app
+            # Note: 7-Zip cannot fully extract NSIS installers - it only gets metadata,
+            # not the actual app files which are embedded in compressed form.
             $installer = Get-ChildItem -Path ./build -Filter "*.exe" -File | Select-Object -First 1
 
             if (-not $installer) {
@@ -218,44 +220,36 @@ jobs:
               exit 1
             }
 
-            Write-Host "Extracting installer: $($installer.FullName)"
+            Write-Host "Running installer silently: $($installer.FullName)"
 
-            # Create extraction directory
-            $extractDir = "./extracted"
-            New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+            # Create installation directory
+            $installDir = "$env:TEMP\openwork-validation"
+            if (Test-Path $installDir) {
+              Remove-Item $installDir -Recurse -Force
+            }
 
-            # Use 7z to extract NSIS installer
-            & "C:\Program Files\7-Zip\7z.exe" x $installer.FullName -o"$extractDir" -y
+            # Run NSIS installer with:
+            # /S = Silent mode
+            # /D = Installation directory (must be last parameter, no quotes around path)
+            $process = Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$installDir" -Wait -PassThru -NoNewWindow
 
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Error: Failed to extract installer"
+            if ($process.ExitCode -ne 0) {
+              Write-Host "Error: Installer failed with exit code $($process.ExitCode)"
               exit 1
             }
 
-            # NSIS installer extracts to $INSTDIR or similar subdirectory
-            # Find the actual app directory by looking for the resources folder
-            Write-Host "Extracted contents:"
-            Get-ChildItem $extractDir -Recurse -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
-
-            # Look for resources directory which indicates the app root
-            $resourcesDir = Get-ChildItem -Path $extractDir -Filter "resources" -Directory -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-
-            if ($resourcesDir) {
-              # App root is the parent of resources
-              $appPath = $resourcesDir.Parent.FullName
-              Write-Host "Found app directory via resources: $appPath"
-            } else {
-              # Fallback: look for `$INSTDIR` directory (common NSIS extraction pattern)
-              $instDir = Get-ChildItem -Path $extractDir -Filter '$INSTDIR' -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($instDir) {
-                $appPath = $instDir.FullName
-                Write-Host "Found app directory via INSTDIR: $appPath"
-              } else {
-                # Last resort: use extracted directory itself
-                $appPath = $extractDir
-                Write-Host "Using extraction root as app path: $appPath"
-              }
+            # Verify installation directory exists
+            if (-not (Test-Path $installDir)) {
+              Write-Host "Error: Installation directory not created"
+              Write-Host "Expected: $installDir"
+              exit 1
             }
+
+            Write-Host "Installed to: $installDir"
+            Write-Host "Contents:"
+            Get-ChildItem $installDir | ForEach-Object { Write-Host "  $($_.Name)" }
+
+            $appPath = $installDir
           }
 
           Write-Host "Validating: $appPath"
