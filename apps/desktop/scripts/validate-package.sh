@@ -106,20 +106,25 @@ for MCP_DIR in "$SKILLS_DIR"/*/; do
   sleep 2
 
   if ! kill -0 $PID 2>/dev/null; then
+    # Process exited - check if it was a crash (non-zero exit) or clean exit
     wait $PID 2>/dev/null
     EXIT_CODE=$?
-    echo "ERROR: MCP crashed on startup"
-    echo "  MCP: $MCP_NAME"
-    echo "  Entry: $MCP_ENTRY"
-    echo "  Exit code: $EXIT_CODE"
-    echo "  Node path: $NODE_BIN"
-    echo "  PATH: $PATH"
-    exit 1
+    if [ $EXIT_CODE -ne 0 ]; then
+      echo "ERROR: MCP crashed on startup"
+      echo "  MCP: $MCP_NAME"
+      echo "  Entry: $MCP_ENTRY"
+      echo "  Exit code: $EXIT_CODE"
+      echo "  Node path: $NODE_BIN"
+      echo "  PATH: $PATH"
+      exit 1
+    fi
+    # Exit code 0 means it started successfully but exited (expected for stdio MCP without client)
+    echo "OK: $MCP_NAME started and exited cleanly (no stdin client)"
+  else
+    kill $PID 2>/dev/null || true
+    wait $PID 2>/dev/null || true
+    echo "OK: $MCP_NAME started successfully"
   fi
-
-  kill $PID 2>/dev/null || true
-  wait $PID 2>/dev/null || true
-  echo "OK: $MCP_NAME started successfully"
 done
 
 echo ""
