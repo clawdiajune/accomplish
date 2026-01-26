@@ -154,6 +154,7 @@
         "to": "skills",
         "filter": [
           "**/*",
+          "!**/dev-browser/dist/**",
           "!**/profiles/**",
           "!**/tmp/**",
           "!**/.git/**",
