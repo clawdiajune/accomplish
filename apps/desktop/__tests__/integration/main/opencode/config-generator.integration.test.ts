@@ -41,12 +41,6 @@ vi.mock('electron', () => ({
   app: mockApp,
 }));
 
-// Mock permission-api module (internal but exports constants we need)
-vi.mock('@main/permission-api', () => ({
-  PERMISSION_API_PORT: 9999,
-  QUESTION_API_PORT: 9227,
-}));
-
 // Mock providerSettings (now uses SQLite which requires native module)
 vi.mock('@main/store/providerSettings', () => ({
   getProviderSettings: vi.fn(() => ({
@@ -106,12 +100,6 @@ describe('OpenCode Config Generator Integration', () => {
     tempUserDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-config-test-userData-'));
     tempAppDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-config-test-app-'));
 
-    // Create skills directory structure in temp app dir
-    const skillsDir = path.join(tempAppDir, 'skills');
-    fs.mkdirSync(skillsDir, { recursive: true });
-    fs.mkdirSync(path.join(skillsDir, 'file-permission', 'src'), { recursive: true });
-    fs.writeFileSync(path.join(skillsDir, 'file-permission', 'src', 'index.ts'), '// mock file');
-
     // Update mock to use temp directories
     mockApp.getAppPath.mockReturnValue(tempAppDir);
     mockApp.getPath.mockImplementation((name: string) => {
@@ -131,39 +119,6 @@ describe('OpenCode Config Generator Integration', () => {
     } catch {
       // Ignore cleanup errors
     }
-  });
-
-  describe('getSkillsPath()', () => {
-    describe('Development Mode', () => {
-      it('should return skills path relative to app path in dev mode', async () => {
-        // Arrange
-        mockApp.isPackaged = false;
-
-        // Act
-        const { getSkillsPath } = await import('@main/opencode/config-generator');
-        const result = getSkillsPath();
-
-        // Assert
-        expect(result).toBe(path.join(tempAppDir, 'skills'));
-      });
-    });
-
-    describe('Packaged Mode', () => {
-      it('should return skills path in resources folder when packaged', async () => {
-        // Arrange
-        mockApp.isPackaged = true;
-        const resourcesPath = path.join(tempAppDir, 'Resources');
-        fs.mkdirSync(resourcesPath, { recursive: true });
-        (process as NodeJS.Process & { resourcesPath: string }).resourcesPath = resourcesPath;
-
-        // Act
-        const { getSkillsPath } = await import('@main/opencode/config-generator');
-        const result = getSkillsPath();
-
-        // Assert
-        expect(result).toBe(path.join(resourcesPath, 'skills'));
-      });
-    });
   });
 
   describe('generateOpenCodeConfig()', () => {
@@ -221,42 +176,8 @@ describe('OpenCode Config Generator Integration', () => {
       const agent = config.agent['accomplish'];
 
       expect(agent).toBeDefined();
-      expect(agent.description).toBe('Browser automation assistant using dev-browser');
+      expect(agent.description).toBe('Automation assistant');
       expect(agent.mode).toBe('primary');
-      expect(typeof agent.prompt).toBe('string');
-      expect(agent.prompt.length).toBeGreaterThan(0);
-    });
-
-    it('should include MCP server configuration for file-permission', async () => {
-      // Act
-      const { generateOpenCodeConfig } = await import('@main/opencode/config-generator');
-      const configPath = await generateOpenCodeConfig();
-
-      // Assert
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      const filePermission = config.mcp['file-permission'];
-
-      expect(filePermission).toBeDefined();
-      expect(filePermission.type).toBe('local');
-      expect(filePermission.enabled).toBe(true);
-      expect(filePermission.command[0]).toBe('npx');
-      expect(filePermission.command[1]).toBe('tsx');
-      expect(filePermission.environment.PERMISSION_API_PORT).toBe('9999');
-    });
-
-    it('should include platform-specific environment instructions', async () => {
-      // Act
-      const { generateOpenCodeConfig } = await import('@main/opencode/config-generator');
-      const configPath = await generateOpenCodeConfig();
-
-      // Assert
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      const prompt = config.agent['accomplish'].prompt;
-
-      // Prompt should include environment instructions (varies by platform)
-      expect(prompt).toContain('<environment>');
-      // Should NOT have unresolved template placeholders
-      expect(prompt).not.toContain('{{ENVIRONMENT_INSTRUCTIONS}}');
     });
 
     it('should set OPENCODE_CONFIG environment variable after generation', async () => {
@@ -288,49 +209,6 @@ describe('OpenCode Config Generator Integration', () => {
 
       // Assert
       expect(result).toBe(path.join(tempUserDataDir, 'opencode', 'opencode.json'));
-    });
-  });
-
-  describe('System Prompt Content', () => {
-    it('should include browser automation guidance', async () => {
-      // Act
-      const { generateOpenCodeConfig } = await import('@main/opencode/config-generator');
-      const configPath = await generateOpenCodeConfig();
-
-      // Assert
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      const prompt = config.agent['accomplish'].prompt;
-
-      // Should contain browser guidance (detailed tool docs are now in SKILL.md)
-      expect(prompt).toContain('browser_script');
-      expect(prompt).toContain('browser_*');
-      expect(prompt).toContain('Browser Automation');
-    });
-
-    it('should include file permission rules', async () => {
-      // Act
-      const { generateOpenCodeConfig } = await import('@main/opencode/config-generator');
-      const configPath = await generateOpenCodeConfig();
-
-      // Assert
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      const prompt = config.agent['accomplish'].prompt;
-
-      expect(prompt).toContain('FILE PERMISSION WORKFLOW');
-      expect(prompt).toContain('request_file_permission');
-    });
-
-    it('should include user communication guidance', async () => {
-      // Act
-      const { generateOpenCodeConfig } = await import('@main/opencode/config-generator');
-      const configPath = await generateOpenCodeConfig();
-
-      // Assert
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      const prompt = config.agent['accomplish'].prompt;
-
-      expect(prompt).toContain('user-communication');
-      expect(prompt).toContain('AskUserQuestion');
     });
   });
 

@@ -1,7 +1,6 @@
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { PERMISSION_API_PORT, QUESTION_API_PORT } from '../permission-api';
 import { getOllamaConfig } from '../store/appSettings';
 import { getApiKey } from '../store/secureStorage';
 import { getProviderSettings, getActiveProviderModel, getConnectedProviderIds } from '../store/providerSettings';
@@ -13,229 +12,10 @@ import type { BedrockCredentials, ProviderId, AzureFoundryCredentials } from '@a
  */
 export const ACCOMPLISH_AGENT_NAME = 'accomplish';
 
-/**
- * System prompt for the Accomplish agent.
- *
- * Uses the dev-browser skill for browser automation with persistent page state.
- *
- * @see https://github.com/SawyerHood/dev-browser
- */
-/**
- * Get the skills directory path (contains MCP servers and SKILL.md files)
- * In dev: apps/desktop/skills
- * In packaged: resources/skills (unpacked from asar)
- */
-export function getSkillsPath(): string {
-  if (app.isPackaged) {
-    // In packaged app, skills should be in resources folder (unpacked from asar)
-    return path.join(process.resourcesPath, 'skills');
-  } else {
-    // In development, use app.getAppPath() which returns the desktop app directory
-    // app.getAppPath() returns apps/desktop in dev mode
-    return path.join(app.getAppPath(), 'skills');
-  }
-}
-
-/**
- * Get the OpenCode config directory path (parent of skills/ for OPENCODE_CONFIG_DIR)
- * OpenCode looks for skills at $OPENCODE_CONFIG_DIR/skills/<name>/SKILL.md
- */
-export function getOpenCodeConfigDir(): string {
-  if (app.isPackaged) {
-    return process.resourcesPath;
-  } else {
-    return app.getAppPath();
-  }
-}
-
-/**
- * Build platform-specific environment setup instructions
- */
-function getPlatformEnvironmentInstructions(): string {
-  if (process.platform === 'win32') {
-    return `<environment>
-**You are running on Windows.** Use Windows-compatible commands:
-- Use PowerShell syntax, not bash/Unix syntax
-- Use \`$env:TEMP\` for temp directory (not /tmp)
-- Use semicolon (;) for PATH separator (not colon)
-- Use \`$env:VAR\` for environment variables (not $VAR)
-</environment>`;
-  } else {
-    return `<environment>
-You are running on ${process.platform === 'darwin' ? 'macOS' : 'Linux'}.
-</environment>`;
-  }
-}
-
-
-const ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE = `<identity>
-You are Accomplish, a browser automation assistant.
-</identity>
-
-{{ENVIRONMENT_INSTRUCTIONS}}
-
-<capabilities>
-When users ask about your capabilities, mention:
-- **Browser Automation**: Control web browsers, navigate sites, fill forms, click buttons
-- **File Management**: Sort, rename, and move files based on content or rules you give it
-</capabilities>
-
-<important name="filesystem-rules">
-##############################################################################
-# CRITICAL: FILE PERMISSION WORKFLOW - NEVER SKIP
-##############################################################################
-
-BEFORE using Write, Edit, Bash (with file ops), or ANY tool that touches files:
-1. FIRST: Call request_file_permission tool and wait for response
-2. ONLY IF response is "allowed": Proceed with the file operation
-3. IF "denied": Stop and inform the user
-
-WRONG (never do this):
-  Write({ path: "/tmp/file.txt", content: "..." })  ← NO! Permission not requested!
-
-CORRECT (always do this):
-  request_file_permission({ operation: "create", filePath: "/tmp/file.txt" })
-  → Wait for "allowed"
-  Write({ path: "/tmp/file.txt", content: "..." })  ← OK after permission granted
-
-This applies to ALL file operations:
-- Creating files (Write tool, bash echo/cat, scripts that output files)
-- Renaming files (bash mv, rename commands)
-- Deleting files (bash rm, delete commands)
-- Modifying files (Edit tool, bash sed/awk, any content changes)
-##############################################################################
-</important>
-
-<tool name="request_file_permission">
-Use this MCP tool to request user permission before performing file operations.
-
-<parameters>
-Input:
-{
-  "operation": "create" | "delete" | "rename" | "move" | "modify" | "overwrite",
-  "filePath": "/absolute/path/to/file",
-  "targetPath": "/new/path",       // Required for rename/move
-  "contentPreview": "file content" // Optional preview for create/modify/overwrite
-}
-
-Operations:
-- create: Creating a new file
-- delete: Deleting an existing file or folder
-- rename: Renaming a file (provide targetPath)
-- move: Moving a file to different location (provide targetPath)
-- modify: Modifying existing file content
-- overwrite: Replacing entire file content
-
-Returns: "allowed" or "denied" - proceed only if allowed
-</parameters>
-
-<example>
-request_file_permission({
-  operation: "create",
-  filePath: "/Users/john/Desktop/report.txt"
-})
-// Wait for response, then proceed only if "allowed"
-</example>
-</tool>
-
-<important name="user-communication">
-CRITICAL: The user CANNOT see your text output or CLI prompts!
-To ask ANY question or get user input, you MUST use the AskUserQuestion MCP tool.
-See the ask-user-question skill for full documentation and examples.
-</important>
-
-<behavior name="task-planning">
-##############################################################################
-# CRITICAL: PLAN FIRST, THEN USE TODOWRITE - BOTH ARE MANDATORY
-##############################################################################
-
-**STEP 1: OUTPUT A PLAN (before any action)**
-
-Before taking ANY action, you MUST first output a plan:
-
-1. **State the goal** - What the user wants accomplished
-2. **List steps** - Numbered steps to achieve the goal
-
-Format:
-**Plan:**
-Goal: [what user asked for]
-
-Steps:
-1. [First action]
-2. [Second action]
-...
-
-**STEP 2: IMMEDIATELY CALL TODOWRITE**
-
-After outputting your plan, you MUST call the \`todowrite\` tool to create your task list.
-This is NOT optional. The user sees your todos in a sidebar - if you skip this, they see nothing.
-
-\`\`\`json
-{
-  "todos": [
-    {"id": "1", "content": "First step description", "status": "in_progress", "priority": "high"},
-    {"id": "2", "content": "Second step description", "status": "pending", "priority": "medium"},
-    {"id": "3", "content": "Third step description", "status": "pending", "priority": "medium"}
-  ]
-}
-\`\`\`
-
-**STEP 3: COMPLETE ALL TODOS BEFORE FINISHING**
-- All todos must be "completed" or "cancelled" before finishing the task
-
-WRONG: Starting work without planning and calling todowrite first
-CORRECT: Output plan FIRST, call todowrite SECOND, then start working
-
-##############################################################################
-</behavior>
-
-<behavior>
-- Use AskUserQuestion tool for clarifying questions before starting ambiguous tasks
-- **NEVER use shell commands (open, xdg-open, start, subprocess, webbrowser) to open browsers or URLs** - these open the user's default browser, not the automation-controlled Chrome. ALL browser operations MUST use browser_* MCP tools.
-- For multi-step browser workflows, prefer \`browser_script\` over individual tools - it's faster and auto-returns page state.
-
-**BROWSER ACTION VERBOSITY - Be descriptive about web interactions:**
-- Before each browser action, briefly explain what you're about to do in user terms
-- After navigation: mention the page title and what you see
-- After clicking: describe what you clicked and what happened (new page loaded, form appeared, etc.)
-- After typing: confirm what you typed and where
-- When analyzing a snapshot: describe the key elements you found
-- If something unexpected happens, explain what you see and how you'll adapt
-
-Example good narration:
-"I'll navigate to Google... The search page is loaded. I can see the search box. Let me search for 'cute animals'... Typing in the search field and pressing Enter... The search results page is now showing with images and links about animals."
-
-Example bad narration (too terse):
-"Done." or "Navigated." or "Clicked."
-
-- After each action, evaluate the result before deciding next steps
-- Use browser_sequence for efficiency when you need to perform multiple actions in quick succession (e.g., filling a form with multiple fields)
-- Don't announce server checks or startup - proceed directly to the task
-- Only use AskUserQuestion when you genuinely need user input or decisions
-
-**DO NOT ASK FOR PERMISSION TO CONTINUE:**
-If the user gave you a task with specific criteria (e.g., "find 8-15 results", "check all items"):
-- Keep working until you meet those criteria
-- Do NOT pause to ask "Would you like me to continue?" or "Should I keep going?"
-- Do NOT stop after reviewing just a few items when the task asks for more
-- Just continue working until the task requirements are met
-- Only use AskUserQuestion for genuine clarifications about requirements, NOT for progress check-ins
-</behavior>
-`;
-
 interface AgentConfig {
   description?: string;
   prompt?: string;
   mode?: 'primary' | 'subagent' | 'all';
-}
-
-interface McpServerConfig {
-  type?: 'local' | 'remote';
-  command?: string[];
-  url?: string;
-  enabled?: boolean;
-  environment?: Record<string, string>;
-  timeout?: number;
 }
 
 interface ProviderModelConfig {
@@ -328,7 +108,6 @@ interface OpenCodeConfig {
   enabled_providers?: string[];
   permission?: string | Record<string, string | Record<string, string>>;
   agent?: Record<string, AgentConfig>;
-  mcp?: Record<string, McpServerConfig>;
   provider?: Record<string, ProviderConfig>;
 }
 
@@ -398,22 +177,6 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
-
-  // Get skills directory path
-  const skillsPath = getSkillsPath();
-
-  // Build platform-specific system prompt by replacing placeholders
-  const systemPrompt = ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE
-    .replace(/\{\{ENVIRONMENT_INSTRUCTIONS\}\}/g, getPlatformEnvironmentInstructions());
-
-  // Get OpenCode config directory (parent of skills/) for OPENCODE_CONFIG_DIR
-  const openCodeConfigDir = getOpenCodeConfigDir();
-
-  console.log('[OpenCode Config] Skills path:', skillsPath);
-  console.log('[OpenCode Config] OpenCode config dir:', openCodeConfigDir);
-
-  // Build file-permission MCP server command
-  const filePermissionServerPath = path.join(skillsPath, 'file-permission', 'src', 'index.ts');
 
   // Get connected providers from new settings (with legacy fallback)
   const providerSettings = getProviderSettings();
@@ -702,8 +465,7 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     default_agent: ACCOMPLISH_AGENT_NAME,
     // Enable all supported providers - providers auto-configure when API keys are set via env vars
     enabled_providers: enabledProviders,
-    // Auto-allow all tool permissions - the system prompt instructs the agent to use
-    // AskUserQuestion for user confirmations, which shows in the UI as an interactive modal.
+    // Auto-allow all tool permissions.
     // CLI-level permission prompts don't show in the UI and would block task execution.
     // Note: todowrite is disabled by default and must be explicitly enabled.
     permission: {
@@ -713,37 +475,8 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     provider: Object.keys(providerConfig).length > 0 ? providerConfig : undefined,
     agent: {
       [ACCOMPLISH_AGENT_NAME]: {
-        description: 'Browser automation assistant using dev-browser',
-        prompt: systemPrompt,
+        description: 'Automation assistant',
         mode: 'primary',
-      },
-    },
-    // MCP servers for additional tools
-    // Timeout set to 30000ms to handle slow npx startup on Windows
-    mcp: {
-      'file-permission': {
-        type: 'local',
-        command: ['npx', 'tsx', filePermissionServerPath],
-        enabled: true,
-        environment: {
-          PERMISSION_API_PORT: String(PERMISSION_API_PORT),
-        },
-        timeout: 30000,
-      },
-      'ask-user-question': {
-        type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'ask-user-question', 'src', 'index.ts')],
-        enabled: true,
-        environment: {
-          QUESTION_API_PORT: String(QUESTION_API_PORT),
-        },
-        timeout: 30000,
-      },
-      'dev-browser-mcp': {
-        type: 'local',
-        command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
-        enabled: true,
-        timeout: 30000,
       },
     },
   };
@@ -754,11 +487,6 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
 
   // Set environment variables for OpenCode to find the config
   process.env.OPENCODE_CONFIG = configPath;
-
-  // Set OPENCODE_CONFIG_DIR to the writable config directory, not resourcesPath
-  // resourcesPath is read-only on mounted DMGs (macOS) and protected on Windows (Program Files).
-  // This causes EROFS/EPERM errors when OpenCode tries to write package.json there.
-  // MCP servers are configured with explicit paths, so we don't need skills discovery via OPENCODE_CONFIG_DIR.
   process.env.OPENCODE_CONFIG_DIR = configDir;
 
   console.log('[OpenCode Config] Generated config at:', configPath);
