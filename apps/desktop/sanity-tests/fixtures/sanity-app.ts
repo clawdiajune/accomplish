@@ -42,6 +42,14 @@ export const test = base.extend<SanityFixtures>({
     const mainPath = resolve(__dirname, '../../dist-electron/main/index.js');
     const apiKey = getApiKeyForModel(currentModel);
 
+    // Build env object, filtering out undefined values
+    const envVars: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) {
+        envVars[key] = value;
+      }
+    }
+
     // Launch WITHOUT mock flags - real API calls
     const app = await electron.launch({
       args: [
@@ -49,12 +57,15 @@ export const test = base.extend<SanityFixtures>({
         '--e2e-skip-auth', // Skip onboarding UI but still use real keys
       ],
       env: {
-        ...process.env,
+        ...envVars,
         E2E_SKIP_AUTH: '1',
         // NO E2E_MOCK_TASK_EVENTS - we want real execution
         NODE_ENV: 'test',
-        // Pass the API key for the current model
+        // Also pass via env var as fallback
         [`${currentModel.envKeyName}`]: apiKey,
+        // Store provider and API key for injection
+        SANITY_TEST_PROVIDER: currentModel.provider,
+        SANITY_TEST_API_KEY: apiKey,
       },
     });
 
@@ -64,7 +75,7 @@ export const test = base.extend<SanityFixtures>({
     await new Promise(resolve => setTimeout(resolve, SANITY_TIMEOUTS.APP_RESTART));
   },
 
-  window: async ({ electronApp }, use) => {
+  window: async ({ electronApp, currentModel }, use) => {
     const window = await electronApp.firstWindow();
     await window.waitForLoadState('load');
 
@@ -73,6 +84,59 @@ export const test = base.extend<SanityFixtures>({
       state: 'visible',
       timeout: SANITY_TIMEOUTS.HYDRATION,
     });
+
+    // Configure the provider system for real API calls
+    // The new provider system requires:
+    // 1. Store the API key via addApiKey (for secure storage)
+    // 2. Register the provider via setConnectedProvider
+    // 3. Set it as active via setActiveProvider
+    const apiKey = getApiKeyForModel(currentModel);
+    await window.evaluate(async ({ provider, modelId, apiKey: key }) => {
+      // window.accomplish is exposed by the preload script
+      type AccomplishAPI = {
+        addApiKey: (p: string, k: string) => Promise<unknown>;
+        setConnectedProvider: (p: string, provider: unknown) => Promise<void>;
+        setActiveProvider: (p: string) => Promise<void>;
+      };
+      const accomplish = (window as unknown as { accomplish: AccomplishAPI }).accomplish;
+
+      // Step 1: Store the API key in secure storage
+      if (accomplish?.addApiKey) {
+        await accomplish.addApiKey(provider, key);
+        console.log(`[Sanity Test] Stored API key for provider: ${provider}`);
+      } else {
+        console.error('[Sanity Test] accomplish.addApiKey not available');
+        return;
+      }
+
+      // Step 2: Register the provider with credentials and selected model
+      const connectedProvider = {
+        providerId: provider,
+        connectionStatus: 'connected',
+        selectedModelId: modelId,
+        credentials: {
+          type: 'api_key',
+          keyPrefix: key.substring(0, 8) + '...',
+        },
+        lastConnectedAt: new Date().toISOString(),
+      };
+
+      if (accomplish?.setConnectedProvider) {
+        await accomplish.setConnectedProvider(provider, connectedProvider);
+        console.log(`[Sanity Test] Registered provider: ${provider} with model: ${modelId}`);
+      } else {
+        console.error('[Sanity Test] accomplish.setConnectedProvider not available');
+        return;
+      }
+
+      // Step 3: Set this provider as the active one
+      if (accomplish?.setActiveProvider) {
+        await accomplish.setActiveProvider(provider);
+        console.log(`[Sanity Test] Set active provider: ${provider}`);
+      } else {
+        console.error('[Sanity Test] accomplish.setActiveProvider not available');
+      }
+    }, { provider: currentModel.provider, modelId: currentModel.modelId, apiKey });
 
     await use(window);
   },

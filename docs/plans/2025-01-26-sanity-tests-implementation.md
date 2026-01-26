@@ -8,6 +8,13 @@
 
 **Tech Stack:** Playwright, TypeScript, existing Electron fixtures, real API calls
 
+**CRITICAL: Before marking this task complete, you MUST run the Claude Suite tests with this API key:**
+```
+ANTHROPIC_API_KEY=<your-key-here>
+```
+
+Run: `ANTHROPIC_API_KEY=<your-key-here> pnpm -F @accomplish/desktop test:sanity:opus`
+
 ---
 
 ## Task 1: Create Sanity Test Directory Structure
