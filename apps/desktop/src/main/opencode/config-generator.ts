@@ -447,12 +447,12 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
   /**
    * Get MCP server command based on environment.
    * - In development: use npx tsx to run TypeScript directly
-   * - In packaged app: use node to run pre-bundled JavaScript
+   * - In packaged app: use node to run pre-bundled CommonJS
    */
   function getMcpCommand(skillName: string): string[] {
     if (app.isPackaged) {
-      // In packaged app, use pre-bundled JavaScript with node
-      const bundledPath = path.join(skillsPath, skillName, 'dist', 'index.mjs');
+      // In packaged app, use pre-bundled CommonJS with node
+      const bundledPath = path.join(skillsPath, skillName, 'dist', 'index.cjs');
       return ['node', bundledPath];
     } else {
       // In development, use npx tsx to run TypeScript

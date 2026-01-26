@@ -53,8 +53,8 @@ export class AppInitManager extends EventEmitter {
 
   private getMCPEntryPath(mcpName: string): string {
     if (app.isPackaged) {
-      // In packaged app, skills are pre-bundled to dist/index.mjs
-      return path.join(this.getSkillsDir(), mcpName, 'dist', 'index.mjs');
+      // In packaged app, skills are pre-bundled to dist/index.cjs (CommonJS)
+      return path.join(this.getSkillsDir(), mcpName, 'dist', 'index.cjs');
     }
     // Development: TypeScript source files, run via `npx tsx` by OpenCode
     return path.join(this.getSkillsDir(), mcpName, 'src', 'index.ts');

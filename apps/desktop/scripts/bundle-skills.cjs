@@ -23,8 +23,8 @@ const SKILLS = [
   {
     name: 'dev-browser',
     entry: 'src/index.ts',
-    // Also bundle the server entry point
-    additionalEntries: ['scripts/start-server.ts'],
+    // Note: start-server.ts is NOT bundled - we create server-launcher.cjs manually
+    // because start-server.ts uses top-level await which requires ESM but express needs CJS
     // Keep playwright external - it has native bindings
     external: ['playwright', 'rebrowser-playwright'],
   },
@@ -110,39 +110,22 @@ async function bundleSkill(skill) {
 
   try {
     // Bundle main entry point
+    // Use CommonJS format because express and its dependencies use dynamic require()
+    // which is not supported in ESM bundles
     await esbuild.build({
       entryPoints: [entryPath],
       bundle: true,
       platform: 'node',
       target: 'node20',
-      format: 'esm',
-      outfile: path.join(distDir, 'index.mjs'),
+      format: 'cjs',
+      outfile: path.join(distDir, 'index.cjs'),
       plugins: [createAliasPlugin(skillDir)],
       external: [
-        // Node.js built-ins should be external
-        'path', 'fs', 'os', 'child_process', 'crypto', 'http', 'https',
-        'net', 'url', 'util', 'stream', 'events', 'buffer', 'querystring',
-        'assert', 'tty', 'zlib', 'dns', 'module', 'readline', 'vm',
-        'worker_threads', 'cluster', 'dgram', 'inspector', 'perf_hooks',
-        'async_hooks', 'string_decoder', 'timers', 'process',
-        // Electron
+        // Skill-specific externals only - Node built-ins are handled by esbuild for CommonJS
         'electron',
-        // Skill-specific externals
         ...skill.external,
       ],
-      // Handle __dirname and __filename in ESM
-      define: {
-        'import.meta.url': 'import.meta.url',
-      },
-      // Banner to handle __dirname in ESM
-      banner: {
-        js: `
-import { fileURLToPath as __bundle_fileURLToPath } from 'url';
-import { dirname as __bundle_dirname } from 'path';
-const __filename = __bundle_fileURLToPath(import.meta.url);
-const __dirname = __bundle_dirname(__filename);
-`.trim(),
-      },
+      // CommonJS has __dirname and __filename built-in, no banner needed
       // Source maps for debugging
       sourcemap: true,
       // Minify for smaller size
@@ -160,32 +143,20 @@ const __dirname = __bundle_dirname(__filename);
           continue;
         }
 
-        const outName = path.basename(additionalEntry, '.ts') + '.mjs';
+        const outName = path.basename(additionalEntry, '.ts') + '.cjs';
         await esbuild.build({
           entryPoints: [additionalPath],
           bundle: true,
           platform: 'node',
           target: 'node20',
-          format: 'esm',
+          format: 'cjs',
           outfile: path.join(distDir, outName),
           plugins: [createAliasPlugin(skillDir)],
           external: [
-            'path', 'fs', 'os', 'child_process', 'crypto', 'http', 'https',
-            'net', 'url', 'util', 'stream', 'events', 'buffer', 'querystring',
-            'assert', 'tty', 'zlib', 'dns', 'module', 'readline', 'vm',
-            'worker_threads', 'cluster', 'dgram', 'inspector', 'perf_hooks',
-            'async_hooks', 'string_decoder', 'timers', 'process',
+            // Skill-specific externals only - Node built-ins are handled by esbuild
             'electron',
             ...skill.external,
           ],
-          banner: {
-            js: `
-import { fileURLToPath as __bundle_fileURLToPath } from 'url';
-import { dirname as __bundle_dirname } from 'path';
-const __filename = __bundle_fileURLToPath(import.meta.url);
-const __dirname = __bundle_dirname(__filename);
-`.trim(),
-          },
           sourcemap: true,
           minify: true,
           keepNames: true,
@@ -195,11 +166,11 @@ const __dirname = __bundle_dirname(__filename);
     }
 
     // Get bundle size
-    const bundlePath = path.join(distDir, 'index.mjs');
+    const bundlePath = path.join(distDir, 'index.cjs');
     const stats = fs.statSync(bundlePath);
     const sizeKB = Math.round(stats.size / 1024);
 
-    console.log(`    ✓ ${skill.name}/dist/index.mjs (${sizeKB} KB)`);
+    console.log(`    ✓ ${skill.name}/dist/index.cjs (${sizeKB} KB)`);
     return true;
   } catch (error) {
     console.error(`  ❌ Failed to bundle ${skill.name}:`, error.message);
@@ -208,79 +179,166 @@ const __dirname = __bundle_dirname(__filename);
 }
 
 /**
- * Create a bundled version of server.cjs for dev-browser
- * This replaces the tsx-based launcher with a direct node launcher
+ * Create a bundled server launcher for dev-browser.
+ *
+ * The original start-server.ts uses top-level await which is not supported in CommonJS.
+ * Instead, we create a CJS launcher that requires the bundled index.cjs and calls serve().
+ * This avoids the ESM/CJS conflict while keeping all the express code in CommonJS.
  */
 async function createBundledServerLauncher() {
-  const serverLauncherPath = path.join(SKILLS_DIR, 'dev-browser', 'dist', 'server-launcher.cjs');
+  const distDir = path.join(SKILLS_DIR, 'dev-browser', 'dist');
+  const serverLauncherPath = path.join(distDir, 'server-launcher.cjs');
 
+  // This is a self-contained CJS launcher that:
+  // 1. Requires the bundled index.cjs which exports serve()
+  // 2. Handles all the startup logic from start-server.ts but without top-level await
   const launcherCode = `#!/usr/bin/env node
 /**
  * Production server launcher for dev-browser.
- * Runs the pre-bundled start-server.mjs directly with Node.js.
- * No tsx or TypeScript compilation needed at runtime.
+ * This is a CommonJS script that loads the bundled index.cjs and starts the server.
+ * Replaces start-server.ts which uses top-level await (ESM-only feature).
  */
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+const { serve } = require('./index.cjs');
+const { execSync } = require('child_process');
+const { mkdirSync, existsSync, unlinkSync } = require('fs');
+const { join } = require('path');
 
-const distDir = __dirname;
-const isWindows = process.platform === 'win32';
-
-// Parse command line arguments
-const headless = process.argv.includes('--headless');
-
-// Logging helper
-function log(...args) {
-  const timestamp = new Date().toISOString();
-  console.error(\`[dev-browser launcher \${timestamp}]\`, ...args);
-}
-
-log('Starting bundled dev-browser server...');
-log('  distDir:', distDir);
-log('  headless:', headless);
-
-// Find node executable
-let nodeExe = 'node';
-if (process.env.NODE_BIN_PATH) {
-  const bundledNode = path.join(process.env.NODE_BIN_PATH, isWindows ? 'node.exe' : 'node');
-  if (fs.existsSync(bundledNode)) {
-    nodeExe = bundledNode;
-    log('  Using bundled node:', nodeExe);
+// Use a user-writable location for tmp and profiles (app bundle is read-only when installed)
+function getDataDir() {
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+  if (process.platform === "darwin") {
+    return join(homeDir, "Library", "Application Support", "Accomplish", "dev-browser");
+  } else if (process.platform === "win32") {
+    return join(process.env.APPDATA || homeDir, "Accomplish", "dev-browser");
+  } else {
+    return join(homeDir, ".accomplish", "dev-browser");
   }
 }
 
-// Path to bundled server
-const serverPath = path.join(distDir, 'start-server.mjs');
-if (!fs.existsSync(serverPath)) {
-  log('ERROR: Bundled server not found at:', serverPath);
-  process.exit(1);
+const dataDir = getDataDir();
+const tmpDir = join(dataDir, "tmp");
+const profileDir = process.env.DEV_BROWSER_PROFILE || join(dataDir, "profiles");
+
+// Create data directories if they don't exist
+console.log(\`Creating data directory: \${dataDir}\`);
+mkdirSync(tmpDir, { recursive: true });
+mkdirSync(profileDir, { recursive: true });
+
+const ACCOMPLISH_HTTP_PORT = parseInt(process.env.DEV_BROWSER_PORT || '9224', 10);
+const ACCOMPLISH_CDP_PORT = parseInt(process.env.DEV_BROWSER_CDP_PORT || '9225', 10);
+
+// Validate port numbers
+if (!Number.isFinite(ACCOMPLISH_HTTP_PORT) || ACCOMPLISH_HTTP_PORT < 1 || ACCOMPLISH_HTTP_PORT > 65535) {
+  throw new Error(\`Invalid DEV_BROWSER_PORT: \${process.env.DEV_BROWSER_PORT}\`);
+}
+if (!Number.isFinite(ACCOMPLISH_CDP_PORT) || ACCOMPLISH_CDP_PORT < 1 || ACCOMPLISH_CDP_PORT > 65535) {
+  throw new Error(\`Invalid DEV_BROWSER_CDP_PORT: \${process.env.DEV_BROWSER_CDP_PORT}\`);
 }
 
-// Build environment
-const env = { ...process.env };
-if (headless) {
-  env.HEADLESS = 'true';
+// Clean up stale Chrome profile lock files
+const profileDirs = [
+  join(profileDir, "chrome-profile"),
+  join(profileDir, "playwright-profile"),
+];
+const staleLockFiles = ["SingletonLock", "SingletonSocket", "SingletonCookie"];
+for (const dir of profileDirs) {
+  for (const lockFile of staleLockFiles) {
+    const lockPath = join(dir, lockFile);
+    if (existsSync(lockPath)) {
+      try {
+        unlinkSync(lockPath);
+        console.log(\`Cleaned up stale lock file: \${lockFile} in \${dir}\`);
+      } catch (err) {
+        console.warn(\`Failed to remove \${lockFile}:\`, err);
+      }
+    }
+  }
 }
 
-log('Spawning:', nodeExe, serverPath);
+// Helper to install Playwright Chromium
+function installPlaywrightChromium() {
+  console.log("\\n========================================");
+  console.log("Downloading browser (one-time setup)...");
+  console.log("This may take 1-2 minutes.");
+  console.log("========================================\\n");
 
-const child = spawn(nodeExe, [serverPath], {
-  cwd: path.dirname(distDir), // Parent of dist = skill root
-  stdio: 'inherit',
-  env,
-  windowsHide: true,
-});
+  const managers = [
+    { name: "bun", command: "bunx playwright install chromium" },
+    { name: "pnpm", command: "pnpm exec playwright install chromium" },
+    { name: "npm", command: "npx playwright install chromium" },
+  ];
 
-child.on('error', (err) => {
-  log('ERROR: Failed to spawn:', err.message);
-  process.exit(1);
-});
+  let pm = null;
+  for (const manager of managers) {
+    try {
+      const cmd = process.platform === 'win32' ? \`where \${manager.name}\` : \`which \${manager.name}\`;
+      execSync(cmd, { stdio: "ignore" });
+      pm = manager;
+      break;
+    } catch {
+      // Package manager not found, try next
+    }
+  }
 
-child.on('close', (code, signal) => {
-  log('Process exited with code:', code, 'signal:', signal);
-  process.exit(code || 0);
-});
+  if (!pm) {
+    throw new Error("No package manager found (tried bun, pnpm, npm)");
+  }
+
+  console.log(\`Using \${pm.name} to install Playwright Chromium...\`);
+  execSync(pm.command, { stdio: "inherit" });
+  console.log("\\nBrowser installed successfully!\\n");
+}
+
+// Start the server
+const headless = process.env.HEADLESS === "true";
+
+async function startServer(retry = false) {
+  try {
+    const server = await serve({
+      port: ACCOMPLISH_HTTP_PORT,
+      cdpPort: ACCOMPLISH_CDP_PORT,
+      headless,
+      profileDir,
+      useSystemChrome: true,
+    });
+
+    console.log(\`Dev browser server started\`);
+    console.log(\`  WebSocket: \${server.wsEndpoint}\`);
+    console.log(\`  Tmp directory: \${tmpDir}\`);
+    console.log(\`  Profile directory: \${profileDir}\`);
+    console.log(\`\\nReady\`);
+    console.log(\`\\nPress Ctrl+C to stop\`);
+
+    // Keep the process running
+    await new Promise(() => {});
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    const isBrowserMissing =
+      errorMessage.includes("Executable doesn't exist") ||
+      errorMessage.includes("browserType.launchPersistentContext") ||
+      errorMessage.includes("npx playwright install") ||
+      errorMessage.includes("run the install command");
+
+    if (isBrowserMissing && !retry) {
+      console.log("\\nSystem Chrome not available, downloading Playwright Chromium...");
+      try {
+        installPlaywrightChromium();
+        await startServer(true);
+        return;
+      } catch (installError) {
+        console.error("Failed to install Playwright browsers:", installError);
+        console.log("You may need to run manually: npx playwright install chromium");
+        process.exit(1);
+      }
+    }
+
+    console.error("Failed to start dev browser server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
 `;
 
   fs.writeFileSync(serverLauncherPath, launcherCode);
