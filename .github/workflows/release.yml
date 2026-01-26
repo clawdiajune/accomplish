@@ -210,6 +210,9 @@ jobs:
       - name: Install skill dependencies
         run: pnpm -F @accomplish/desktop install:skills
 
+      - name: Build skills for production
+        run: pnpm -F @accomplish/desktop build:skills
+
       - name: Build desktop app
         run: pnpm -F @accomplish/desktop build
 
@@ -264,6 +267,9 @@ jobs:
       - name: Install skill dependencies
         run: pnpm -F @accomplish/desktop install:skills
 
+      - name: Build skills for production
+        run: pnpm -F @accomplish/desktop build:skills
+
       - name: Build desktop app
         run: pnpm -F @accomplish/desktop build
 
@@ -312,6 +318,9 @@ jobs:
 
       - name: Install skill dependencies
         run: pnpm -F @accomplish/desktop install:skills
+
+      - name: Build skills for production
+        run: pnpm -F @accomplish/desktop build:skills
 
       - name: Build desktop app
         run: pnpm -F @accomplish/desktop build
