@@ -83,8 +83,11 @@ if (isWindows) {
   runCommand('npx electron-rebuild', 'Running electron-rebuild');
 }
 
-// Skills are now part of the pnpm workspace, so no need to install separately
-// They are handled by the main pnpm install command
+// Install skill dependencies (works on all platforms)
+const skills = ['dev-browser', 'dev-browser-mcp', 'file-permission', 'ask-user-question', 'complete-task'];
+for (const skill of skills) {
+  runCommand(`npm --prefix skills/${skill} install`, `Installing ${skill} dependencies`);
+}
 
 console.log('\n> Postinstall complete!');
 
