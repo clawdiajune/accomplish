@@ -6,7 +6,8 @@
  * isolated PTY process, state, and event handling.
  */
 
-import { OpenCodeAdapter, isOpenCodeCliInstalled, OpenCodeCliNotFoundError } from './adapter';
+import { OpenCodeAdapter } from './adapter';
+import { isOpenCodeCliInstalled, OpenCodeCliNotFoundError } from './cli-path';
 import { getSkillsPath } from './config-generator';
 import { getNpxPath, getBundledNodePaths } from '../utils/bundled-node';
 import { spawn } from 'child_process';

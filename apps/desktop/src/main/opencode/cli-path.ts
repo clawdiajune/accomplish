@@ -211,6 +211,32 @@ export function isOpenCodeBundled(): boolean {
 /**
  * Get the version of the bundled OpenCode CLI
  */
+/**
+ * Check if OpenCode CLI is available (bundled or installed)
+ */
+export async function isOpenCodeCliInstalled(): Promise<boolean> {
+  return isOpenCodeBundled();
+}
+
+/**
+ * Get OpenCode CLI version
+ */
+export async function getOpenCodeCliVersion(): Promise<string | null> {
+  return getBundledOpenCodeVersion();
+}
+
+/**
+ * Error thrown when OpenCode CLI is not available
+ */
+export class OpenCodeCliNotFoundError extends Error {
+  constructor() {
+    super(
+      'OpenCode CLI is not available. The bundled CLI may be missing or corrupted. Please reinstall the application.'
+    );
+    this.name = 'OpenCodeCliNotFoundError';
+  }
+}
+
 export function getBundledOpenCodeVersion(): string | null {
   try {
     if (app.isPackaged) {

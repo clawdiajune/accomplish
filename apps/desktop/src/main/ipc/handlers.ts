@@ -5,7 +5,7 @@ import fs from 'fs';
 import {
   isOpenCodeCliInstalled,
   getOpenCodeCliVersion,
-} from '../opencode/adapter';
+} from '../opencode/cli-path';
 import { getLogCollector } from '../logging';
 import { getAzureEntraToken } from '../opencode/azure-token-manager';
 import {
