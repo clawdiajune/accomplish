@@ -14,6 +14,7 @@
     "build:unpack": "tsc && vite build && node scripts/package.cjs --dir",
     "package": "pnpm build && node scripts/package.cjs --mac --publish never",
     "package:mac": "pnpm build && node scripts/package.cjs --mac --publish never",
+    "package:mac:unsigned": "pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/package.cjs --mac --publish never",
     "release": "pnpm build && node scripts/package.cjs --mac --publish always",
     "release:mac": "pnpm build && node scripts/package.cjs --mac --publish always",
     "package:win": "pnpm build && node scripts/package.cjs --win --x64 --publish never",
