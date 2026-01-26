@@ -127,6 +127,15 @@ jobs:
           VERSION="${{ steps.bump.outputs.new_version }}"
           BRANCH="release/v${VERSION}"
           DRY_RUN="${{ steps.inputs.outputs.dry_run }}"
+          BUMP_TYPE="${{ steps.inputs.outputs.bump_type }}"
+
+          # For "none" bump type in dry run, just delete the release and exit
+          # No git operations needed - build jobs will checkout from existing tag
+          if [ "$BUMP_TYPE" == "none" ]; then
+            echo "REBUILD MODE: Using existing tag v${VERSION}, deleting release to rebuild"
+            gh release delete "v${VERSION}" --yes 2>/dev/null || true
+            exit 0
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -138,16 +147,8 @@ jobs:
 
           if [ "$DRY_RUN" == "true" ]; then
             echo "DRY RUN: Creating test tag without PR"
-
-            # For "none" bump type, tag already exists - just delete the release to allow rebuild
-            if [ "${{ steps.inputs.outputs.bump_type }}" == "none" ]; then
-              echo "REBUILD MODE: Using existing tag v${VERSION}, deleting release to rebuild"
-              gh release delete "v${VERSION}" --yes 2>/dev/null || true
-              # Don't touch the tag - build jobs will checkout from existing tag
-            else
-              git tag "v${VERSION}"
-              git push origin "v${VERSION}" --force
-            fi
+            git tag "v${VERSION}"
+            git push origin "v${VERSION}" --force
           else
             # Push branch
             git push origin "$BRANCH"
