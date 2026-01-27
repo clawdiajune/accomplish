@@ -61,14 +61,17 @@ class MockOpenCodeAdapter extends EventEmitter {
   private taskId: string | null = null;
   private sessionId: string | null = null;
   private disposed = false;
+  private lastStartConfig: TaskConfig | null = null;
   private startTaskFn: (config: TaskConfig) => Promise<{ id: string; prompt: string; status: string; messages: never[]; createdAt: string }>;
 
   constructor(taskId?: string) {
     super();
     this.taskId = taskId || null;
+    createdAdapters.push(this);
     this.startTaskFn = vi.fn(async (config: TaskConfig) => {
       this.taskId = config.taskId || `task_${Date.now()}`;
       this.sessionId = `session_${Date.now()}`;
+      this.lastStartConfig = config;
       return {
         id: this.taskId,
         prompt: config.prompt,
@@ -85,6 +88,10 @@ class MockOpenCodeAdapter extends EventEmitter {
 
   getSessionId() {
     return this.sessionId;
+  }
+
+  getLastStartConfig() {
+    return this.lastStartConfig;
   }
 
   isAdapterDisposed() {
@@ -132,6 +139,18 @@ class MockOpenCodeAdapter extends EventEmitter {
 
   simulatePermissionRequest(request: PermissionRequest) {
     this.emit('permission-request', request);
+  }
+
+  simulatePrematureStop(payload: { taskId: string | null; sessionId: string | null }) {
+    this.emit('premature-stop', {
+      taskId: payload.taskId,
+      sessionId: payload.sessionId,
+      reason: 'stop',
+      stepMessageId: 'message-1',
+      hadText: false,
+      hadTool: false,
+      lastToolUseName: null,
+    });
   }
 }
 
@@ -246,6 +265,46 @@ describe('Task Manager Module', () => {
         expect(task.status).toBe('running');
         expect(manager.hasActiveTask('task-1')).toBe(true);
         expect(manager.getActiveTaskCount()).toBe(1);
+      });
+
+      it('should auto-retry on premature-stop and continue same session', async () => {
+        // Arrange
+        const prevAutoRetry = process.env.OPENWORK_OPENCODE_AUTO_RETRY;
+        const prevMaxRetries = process.env.OPENWORK_OPENCODE_AUTO_RETRY_MAX;
+        process.env.OPENWORK_OPENCODE_AUTO_RETRY = '1';
+        process.env.OPENWORK_OPENCODE_AUTO_RETRY_MAX = '1';
+
+        const manager = new TaskManager();
+        const callbacks = createMockCallbacks();
+        const config: TaskConfig = { prompt: 'Test task' };
+
+        // Act
+        await manager.startTask('task-1', config, callbacks);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const firstAdapter = createdAdapters[0];
+        firstAdapter.simulatePrematureStop({ taskId: 'task-1', sessionId: 'session_abc' });
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Assert
+        expect(createdAdapters.length).toBe(2);
+        const retryConfig = createdAdapters[1].getLastStartConfig();
+        expect(retryConfig?.sessionId).toBe('session_abc');
+        expect(retryConfig?.prompt).toContain('Continue');
+        expect(callbacks.onComplete).toHaveBeenCalledTimes(0);
+
+        // Cleanup env
+        if (prevAutoRetry === undefined) {
+          delete process.env.OPENWORK_OPENCODE_AUTO_RETRY;
+        } else {
+          process.env.OPENWORK_OPENCODE_AUTO_RETRY = prevAutoRetry;
+        }
+        if (prevMaxRetries === undefined) {
+          delete process.env.OPENWORK_OPENCODE_AUTO_RETRY_MAX;
+        } else {
+          process.env.OPENWORK_OPENCODE_AUTO_RETRY_MAX = prevMaxRetries;
+        }
       });
 
       it('should throw error if task ID already exists', async () => {

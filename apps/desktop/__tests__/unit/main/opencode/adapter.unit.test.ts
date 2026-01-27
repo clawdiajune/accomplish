@@ -384,13 +384,34 @@ describe('OpenCode Adapter Module', () => {
         expect(toolResultEvents[0]).toBe('File contents here');
       });
 
-      it('should emit complete event on step_finish with stop reason', async () => {
+      it('should emit complete event on step_finish with stop reason when step had text', async () => {
         // Arrange
         const adapter = new OpenCodeAdapter();
         const completeEvents: Array<{ status: string; sessionId?: string }> = [];
         adapter.on('complete', (result) => completeEvents.push(result));
 
         await adapter.startTask({ prompt: 'Test' });
+
+        const stepStartMessage: OpenCodeStepStartMessage = {
+          type: 'step_start',
+          part: {
+            id: 'step-start-1',
+            sessionID: 'session-123',
+            messageID: 'message-123',
+            type: 'step-start',
+          },
+        };
+
+        const textMessage: OpenCodeTextMessage = {
+          type: 'text',
+          part: {
+            id: 'text-1',
+            sessionID: 'session-123',
+            messageID: 'message-123',
+            type: 'text',
+            text: 'Hello',
+          },
+        };
 
         const stepFinishMessage: OpenCodeStepFinishMessage = {
           type: 'step_finish',
@@ -404,11 +425,55 @@ describe('OpenCode Adapter Module', () => {
         };
 
         // Act
+        mockPtyInstance.simulateData(JSON.stringify(stepStartMessage) + '\n');
+        mockPtyInstance.simulateData(JSON.stringify(textMessage) + '\n');
         mockPtyInstance.simulateData(JSON.stringify(stepFinishMessage) + '\n');
 
         // Assert
         expect(completeEvents.length).toBe(1);
         expect(completeEvents[0].status).toBe('success');
+      });
+
+      it('should emit premature-stop on stop reason with no text/tool output (log line repro)', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const prematureEvents: Array<{ taskId: string | null; sessionId: string | null }> = [];
+        const completeEvents: Array<{ status: string }> = [];
+        adapter.on('premature-stop', (payload) => prematureEvents.push(payload));
+        adapter.on('complete', (result) => completeEvents.push(result));
+
+        await adapter.startTask({ prompt: 'Test' });
+
+        const logLine = 'INFO  2026-01-27T10:12:09 +14ms service=bus type=message.part.updated publishing\n';
+        const stepStartMessage: OpenCodeStepStartMessage = {
+          type: 'step_start',
+          part: {
+            id: 'prt_bfef0728e0017JdYv9KlemWD2P',
+            sessionID: 'ses_40110642affeDPefHSjRA14we5',
+            messageID: 'msg_bfef06279001niI99a62uTABJr',
+            type: 'step-start',
+          },
+        };
+        const stepFinishMessage: OpenCodeStepFinishMessage = {
+          type: 'step_finish',
+          part: {
+            id: 'prt_bfef0729c001qUzYkoFiemjhlZ',
+            sessionID: 'ses_40110642affeDPefHSjRA14we5',
+            messageID: 'msg_bfef06279001niI99a62uTABJr',
+            type: 'step-finish',
+            reason: 'stop',
+          },
+        };
+
+        // Act
+        mockPtyInstance.simulateData(logLine);
+        mockPtyInstance.simulateData(JSON.stringify(stepStartMessage) + '\n');
+        mockPtyInstance.simulateData(JSON.stringify(stepFinishMessage) + '\n');
+
+        // Assert
+        expect(prematureEvents.length).toBe(1);
+        expect(prematureEvents[0].sessionId).toBe('ses_40110642affeDPefHSjRA14we5');
+        expect(completeEvents.length).toBe(0);
       });
 
       it('should not emit complete event on step_finish with tool_use reason', async () => {
