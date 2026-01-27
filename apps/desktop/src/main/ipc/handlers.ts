@@ -75,6 +75,11 @@ import {
   isFilePermissionRequest,
   isQuestionRequest,
 } from '../permission-api';
+import {
+  validateElevenLabsApiKey,
+  transcribeAudio,
+  isElevenLabsConfigured,
+} from '../services/speechToText';
 import type {
   TaskConfig,
   PermissionResponse,
@@ -108,7 +113,7 @@ import {
 } from '../test-utils/mock-task-flow';
 
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax', 'lmstudio']);
+const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'moonshot', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax', 'lmstudio', 'elevenlabs']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
 interface OllamaModel {
@@ -995,10 +1000,34 @@ export function registerIPCHandlers(): void {
           );
           break;
 
-        // Z.AI Coding Plan uses the same validation as standard API
-        case 'zai':
+        case 'moonshot':
           response = await fetchWithTimeout(
-            'https://open.bigmodel.cn/api/paas/v4/models',
+            'https://api.moonshot.ai/v1/chat/completions',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sanitizedKey}`,
+              },
+              body: JSON.stringify({
+                model: 'kimi-latest',
+                max_tokens: 1,
+                messages: [{ role: 'user', content: 'test' }],
+              }),
+            },
+            API_KEY_VALIDATION_TIMEOUT_MS
+          );
+          break;
+
+        // Z.AI Coding Plan uses the same validation as standard API
+        case 'zai': {
+          const zaiRegion = (options?.region as string) || 'international';
+          const zaiEndpoint = zaiRegion === 'china'
+            ? 'https://open.bigmodel.cn/api/paas/v4/models'
+            : 'https://api.z.ai/api/coding/paas/v4/models';
+
+          response = await fetchWithTimeout(
+            zaiEndpoint,
             {
               method: 'GET',
               headers: {
@@ -1008,6 +1037,7 @@ export function registerIPCHandlers(): void {
             API_KEY_VALIDATION_TIMEOUT_MS
           );
           break;
+        }
 
         case 'azure-foundry':
           // Prioritize options passed in (from settings dialog setup)
@@ -2336,6 +2366,38 @@ export function registerIPCHandlers(): void {
     }
   );
 
+  // Speech-to-Text: Check if ElevenLabs is configured
+  handle('speech:is-configured', async (_event: IpcMainInvokeEvent) => {
+    return isElevenLabsConfigured();
+  });
+
+  // Speech-to-Text: Get configuration status
+  handle('speech:get-config', async (_event: IpcMainInvokeEvent) => {
+    const apiKey = getApiKey('elevenlabs');
+    return {
+      enabled: Boolean(apiKey && apiKey.trim()),
+      hasApiKey: Boolean(apiKey),
+      apiKeyPrefix: apiKey ? apiKey.substring(0, 8) + '...' : undefined,
+    };
+  });
+
+  // Speech-to-Text: Validate API key (makes actual API call to ElevenLabs)
+  handle('speech:validate', async (_event: IpcMainInvokeEvent, apiKey?: string) => {
+    return validateElevenLabsApiKey(apiKey);
+  });
+
+  // Speech-to-Text: Transcribe audio (receives audio data from renderer, calls ElevenLabs API)
+  handle('speech:transcribe', async (_event: IpcMainInvokeEvent, audioData: ArrayBuffer, mimeType?: string) => {
+    console.log('[IPC] speech:transcribe received:', {
+      audioDataType: typeof audioData,
+      audioDataByteLength: audioData?.byteLength,
+      mimeType,
+    });
+    // Convert ArrayBuffer to Buffer for the service
+    const buffer = Buffer.from(audioData);
+    console.log('[IPC] Converted to buffer:', { bufferLength: buffer.length });
+    return transcribeAudio(buffer, mimeType);
+  });
   // Provider Settings
   handle('provider-settings:get', async () => {
     return getProviderSettings();
