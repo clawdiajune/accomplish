@@ -313,6 +313,7 @@ jobs:
         run: node scripts/package.cjs --win --x64 --publish never
         working-directory: apps/desktop
         env:
+          DEBUG: electron-builder,electron-builder:*
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
