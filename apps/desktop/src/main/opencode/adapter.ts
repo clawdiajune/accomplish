@@ -68,6 +68,15 @@ export interface OpenCodeAdapterEvents {
   debug: [{ type: string; message: string; data?: unknown }];
   'todo:update': [TodoItem[]];
   'auth-error': [{ providerId: string; message: string }];
+  'premature-stop': [{
+    taskId: string | null;
+    sessionId: string | null;
+    reason: string;
+    stepMessageId: string | null;
+    hadText: boolean;
+    hadTool: boolean;
+    lastToolUseName: string | null;
+  }];
 }
 
 export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
@@ -87,6 +96,26 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private waitingTransitionTimer: ReturnType<typeof setTimeout> | null = null;
   /** Whether the first tool has been received (to stop showing startup stages) */
   private hasReceivedFirstTool: boolean = false;
+  /** Last parsed OpenCode message type (for diagnostics) */
+  private lastMessageType: string | null = null;
+  /** Timestamp of last parsed OpenCode message (ISO) */
+  private lastMessageAt: string | null = null;
+  /** Last tool name observed (tool_call or tool_use) */
+  private lastToolUseName: string | null = null;
+  /** Last step_finish reason observed */
+  private lastStepFinishReason: string | null = null;
+  /** Timestamp of last step_finish (ISO) */
+  private lastStepFinishAt: string | null = null;
+  /** Last PTY exit code observed */
+  private lastExitCode: number | null = null;
+  /** Last PTY exit signal observed */
+  private lastExitSignal: number | null = null;
+  /** Current step message ID (from step_start) for tracking output presence */
+  private currentStepMessageId: string | null = null;
+  /** Whether current step had any assistant text */
+  private stepHadText: boolean = false;
+  /** Whether current step had any tool usage */
+  private stepHadTool: boolean = false;
 
   /**
    * Create a new OpenCodeAdapter instance
@@ -325,10 +354,36 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
       // Handle PTY exit
       this.ptyProcess.onExit(({ exitCode, signal }) => {
+        this.lastExitCode = exitCode ?? null;
+        this.lastExitSignal = typeof signal === 'number' ? signal : null;
         const exitMsg = `PTY Process exited with code: ${exitCode}, signal: ${signal}`;
-        console.log('[OpenCode CLI]', exitMsg);
-        this.emit('debug', { type: 'exit', message: exitMsg, data: { exitCode, signal } });
-        this.handleProcessExit(exitCode);
+        console.log('[OpenCode CLI]', exitMsg, {
+          taskId: this.currentTaskId,
+          sessionId: this.currentSessionId,
+          wasInterrupted: this.wasInterrupted,
+          hasCompleted: this.hasCompleted,
+          lastMessageType: this.lastMessageType,
+          lastToolUseName: this.lastToolUseName,
+          lastStepFinishReason: this.lastStepFinishReason,
+        });
+        this.emit('debug', {
+          type: 'exit',
+          message: exitMsg,
+          data: {
+            exitCode,
+            signal,
+            taskId: this.currentTaskId,
+            sessionId: this.currentSessionId,
+            wasInterrupted: this.wasInterrupted,
+            hasCompleted: this.hasCompleted,
+            lastMessageType: this.lastMessageType,
+            lastMessageAt: this.lastMessageAt,
+            lastToolUseName: this.lastToolUseName,
+            lastStepFinishReason: this.lastStepFinishReason,
+            lastStepFinishAt: this.lastStepFinishAt,
+          },
+        });
+        this.handleProcessExit(exitCode, signal);
       });
     }
 
@@ -370,6 +425,11 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
    */
   async cancelTask(): Promise<void> {
     if (this.ptyProcess) {
+      console.log('[OpenCode CLI] Cancel task requested', {
+        taskId: this.currentTaskId,
+        sessionId: this.currentSessionId,
+        hasCompleted: this.hasCompleted,
+      });
       // Kill the PTY process
       this.ptyProcess.kill();
       this.ptyProcess = null;
@@ -389,6 +449,11 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     // Mark as interrupted so we can handle the exit appropriately
     this.wasInterrupted = true;
+    console.log('[OpenCode CLI] Interrupt task requested', {
+      taskId: this.currentTaskId,
+      sessionId: this.currentSessionId,
+      hasCompleted: this.hasCompleted,
+    });
 
     // Send Ctrl+C (ASCII 0x03) to the PTY to interrupt current operation
     this.ptyProcess.write('\x03');
@@ -436,7 +501,16 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       return;
     }
 
-    console.log(`[OpenCode Adapter] Disposing adapter for task ${this.currentTaskId}`);
+    console.log(`[OpenCode Adapter] Disposing adapter for task ${this.currentTaskId}`, {
+      sessionId: this.currentSessionId,
+      wasInterrupted: this.wasInterrupted,
+      hasCompleted: this.hasCompleted,
+      lastMessageType: this.lastMessageType,
+      lastToolUseName: this.lastToolUseName,
+      lastStepFinishReason: this.lastStepFinishReason,
+      lastExitCode: this.lastExitCode,
+      lastExitSignal: this.lastExitSignal,
+    });
     this.isDisposed = true;
 
     // Stop the log watcher
@@ -463,6 +537,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.hasCompleted = true;
     this.currentModelId = null;
     this.hasReceivedFirstTool = false;
+    this.resetStepTracking(null);
 
     // Clear waiting transition timer
     if (this.waitingTransitionTimer) {
@@ -722,6 +797,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       '--format', 'json',
     ];
 
+    // Enable OpenCode internal logging when requested (or in dev server mode)
+    const shouldPrintLogs = process.env.OPENWORK_OPENCODE_PRINT_LOGS === '1' || Boolean(process.env.VITE_DEV_SERVER_URL);
+    if (shouldPrintLogs) {
+      args.push('--print-logs');
+      console.log('[OpenCode CLI] --print-logs enabled');
+    }
+    const logLevel = process.env.OPENWORK_OPENCODE_LOG_LEVEL;
+    if (logLevel) {
+      args.push('--log-level', logLevel);
+      console.log('[OpenCode CLI] --log-level set to:', logLevel);
+    }
+
     // Add model selection if specified
     if (selectedModel?.model) {
       if (selectedModel.provider === 'zai') {
@@ -774,13 +861,36 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     });
   }
 
+  private resetStepTracking(nextMessageId: string | null = null): void {
+    this.currentStepMessageId = nextMessageId;
+    this.stepHadText = false;
+    this.stepHadTool = false;
+  }
+
+  private markStepActivity(messageId: string | null | undefined, kind: 'text' | 'tool'): void {
+    if (!messageId) {
+      return;
+    }
+    if (!this.currentStepMessageId || this.currentStepMessageId !== messageId) {
+      this.resetStepTracking(messageId);
+    }
+    if (kind === 'text') {
+      this.stepHadText = true;
+    } else {
+      this.stepHadTool = true;
+    }
+  }
+
   private handleMessage(message: OpenCodeMessage): void {
     console.log('[OpenCode Adapter] Handling message type:', message.type);
+    this.lastMessageType = message.type;
+    this.lastMessageAt = new Date().toISOString();
 
     switch (message.type) {
       // Step start event
       case 'step_start':
         this.currentSessionId = message.part.sessionID;
+        this.resetStepTracking(message.part.messageID ?? null);
         // Emit 'connecting' stage with model display name
         const modelDisplayName = this.currentModelId
           ? getModelDisplayName(this.currentModelId)
@@ -806,6 +916,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         if (!this.currentSessionId && message.part.sessionID) {
           this.currentSessionId = message.part.sessionID;
         }
+        this.markStepActivity(message.part.messageID ?? null, 'text');
         this.emit('message', message);
 
         if (message.part.text) {
@@ -823,7 +934,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       case 'tool_call':
         const toolName = message.part.tool || 'unknown';
         const toolInput = message.part.input;
+        this.markStepActivity(message.part.messageID ?? null, 'tool');
 
+        this.lastToolUseName = toolName;
         console.log('[OpenCode Adapter] Tool call:', toolName);
         this.maybeEnableCompletionEnforcer(toolName);
 
@@ -864,9 +977,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         const toolUseName = toolUseMessage.part.tool || 'unknown';
         const toolUseInput = toolUseMessage.part.state?.input;
         const toolUseOutput = toolUseMessage.part.state?.output || '';
+        this.markStepActivity(toolUseMessage.part.messageID ?? null, 'tool');
 
+        this.lastToolUseName = toolUseName;
         this.maybeEnableCompletionEnforcer(toolUseName);
-
         // Mark first tool received and cancel waiting transition timer
         if (!this.hasReceivedFirstTool) {
           this.hasReceivedFirstTool = true;
@@ -939,6 +1053,53 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
       // Step finish event
       case 'step_finish':
+        this.lastStepFinishReason = message.part.reason || null;
+        this.lastStepFinishAt = new Date().toISOString();
+        console.log('[OpenCode Adapter] step_finish received', {
+          reason: message.part.reason,
+          taskId: this.currentTaskId,
+          sessionId: this.currentSessionId,
+          wasInterrupted: this.wasInterrupted,
+          hasCompleted: this.hasCompleted,
+          lastMessageType: this.lastMessageType,
+          lastToolUseName: this.lastToolUseName,
+          currentStepMessageId: this.currentStepMessageId,
+          stepHadText: this.stepHadText,
+          stepHadTool: this.stepHadTool,
+        });
+        const finishReason = message.part.reason || '';
+        const isStopReason = finishReason === 'stop' || finishReason === 'end_turn';
+        const stepMessageId = message.part.messageID ?? null;
+        const stepMatches = !this.currentStepMessageId || this.currentStepMessageId === stepMessageId;
+        const stepHadOutput = this.stepHadText || this.stepHadTool;
+        if (
+          isStopReason &&
+          stepMatches &&
+          !stepHadOutput &&
+          !this.wasInterrupted &&
+          !this.hasCompleted &&
+          !this.isDisposed
+        ) {
+          console.log('[OpenCode Adapter] Premature stop detected; emitting retry signal', {
+            taskId: this.currentTaskId,
+            sessionId: this.currentSessionId,
+            reason: finishReason,
+            stepMessageId,
+          });
+          // Prevent automatic completion from exit handlers
+          this.hasCompleted = true;
+          this.emit('premature-stop', {
+            taskId: this.currentTaskId,
+            sessionId: this.currentSessionId,
+            reason: finishReason,
+            stepMessageId,
+            hadText: this.stepHadText,
+            hadTool: this.stepHadTool,
+            lastToolUseName: this.lastToolUseName,
+          });
+          this.resetStepTracking(null);
+          break;
+        }
         if (message.part.reason === 'error') {
           if (!this.hasCompleted) {
             this.hasCompleted = true;
@@ -948,11 +1109,12 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
               error: 'Task failed',
             });
           }
+          this.resetStepTracking(null);
           break;
         }
 
         if (
-          (message.part.reason === 'stop' || message.part.reason === 'end_turn') &&
+          (finishReason === 'stop' || finishReason === 'end_turn') &&
           !this.hasCompleted
         ) {
           this.hasCompleted = true;
@@ -961,6 +1123,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
             sessionId: this.currentSessionId || undefined,
           });
         }
+        this.resetStepTracking(null);
         break;
 
       // Error event
@@ -1073,9 +1236,21 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   /**
    * Process exit handler
    */
-  private handleProcessExit(code: number | null): void {
+  private handleProcessExit(code: number | null, signal?: number | null): void {
     // Clean up PTY process reference
     this.ptyProcess = null;
+
+    console.log('[OpenCode Adapter] handleProcessExit', {
+      exitCode: code,
+      signal,
+      taskId: this.currentTaskId,
+      sessionId: this.currentSessionId,
+      wasInterrupted: this.wasInterrupted,
+      hasCompleted: this.hasCompleted,
+      lastMessageType: this.lastMessageType,
+      lastToolUseName: this.lastToolUseName,
+      lastStepFinishReason: this.lastStepFinishReason,
+    });
 
     // Handle interrupted tasks immediately
     // This ensures user interrupts are respected regardless of completion state

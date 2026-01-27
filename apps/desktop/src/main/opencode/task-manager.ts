@@ -391,11 +391,17 @@ export class TaskManager {
   private activeTasks: Map<string, ManagedTask> = new Map();
   private taskQueue: QueuedTask[] = [];
   private maxConcurrentTasks: number;
+  private autoRetryCounts: Map<string, number> = new Map();
+  private autoRetryEnabled: boolean;
+  private maxAutoRetries: number;
   /** Tracks whether this is the first task since app launch (cold start) */
   private isFirstTask: boolean = true;
 
   constructor(options?: { maxConcurrentTasks?: number }) {
     this.maxConcurrentTasks = options?.maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT_TASKS;
+    this.autoRetryEnabled = process.env.OPENWORK_OPENCODE_AUTO_RETRY !== '0';
+    const maxRetries = Number.parseInt(process.env.OPENWORK_OPENCODE_AUTO_RETRY_MAX || '', 10);
+    this.maxAutoRetries = Number.isFinite(maxRetries) && maxRetries >= 0 ? maxRetries : 1;
   }
 
   /**
@@ -423,6 +429,11 @@ export class TaskManager {
     // Check if task already exists (either running or queued)
     if (this.activeTasks.has(taskId) || this.taskQueue.some(q => q.taskId === taskId)) {
       throw new Error(`Task ${taskId} is already running or queued`);
+    }
+
+    // Initialize retry counter
+    if (!this.autoRetryCounts.has(taskId)) {
+      this.autoRetryCounts.set(taskId, 0);
     }
 
     // If at max concurrent tasks, queue this one
@@ -497,14 +508,23 @@ export class TaskManager {
     };
 
     const onComplete = (result: TaskResult) => {
+      console.log(`[TaskManager] Task ${taskId} complete`, {
+        status: result.status,
+        sessionId: result.sessionId,
+        durationMs: result.durationMs,
+        error: result.error,
+      });
       callbacks.onComplete(result);
+      this.autoRetryCounts.delete(taskId);
       // Auto-cleanup on completion and process queue
       this.cleanupTask(taskId);
       this.processQueue();
     };
 
     const onError = (error: Error) => {
+      console.error(`[TaskManager] Task ${taskId} error`, error);
       callbacks.onError(error);
+      this.autoRetryCounts.delete(taskId);
       // Auto-cleanup on error and process queue
       this.cleanupTask(taskId);
       this.processQueue();
@@ -522,6 +542,71 @@ export class TaskManager {
       callbacks.onAuthError?.(error);
     };
 
+    const onPrematureStop = (payload: {
+      taskId: string | null;
+      sessionId: string | null;
+      reason: string;
+      stepMessageId: string | null;
+      hadText: boolean;
+      hadTool: boolean;
+      lastToolUseName: string | null;
+    }) => {
+      const managed = this.activeTasks.get(taskId);
+      if (!managed || managed.adapter !== adapter) {
+        console.log('[TaskManager] Premature stop ignored (task no longer active)', {
+          taskId,
+          sessionId: payload.sessionId,
+        });
+        return;
+      }
+
+      const sessionId = payload.sessionId || adapter.getSessionId() || config.sessionId || null;
+      const retryCount = this.autoRetryCounts.get(taskId) ?? 0;
+      const canRetry = Boolean(sessionId) && this.autoRetryEnabled && retryCount < this.maxAutoRetries;
+
+      console.log('[TaskManager] Premature stop received', {
+        taskId,
+        sessionId,
+        retryCount,
+        maxAutoRetries: this.maxAutoRetries,
+        autoRetryEnabled: this.autoRetryEnabled,
+      });
+
+      if (!canRetry) {
+        console.log('[TaskManager] Auto-retry skipped', {
+          taskId,
+          sessionId,
+          reason: !sessionId ? 'missing-session' : 'retry-disabled-or-exhausted',
+        });
+        this.autoRetryCounts.delete(taskId);
+        callbacks.onComplete({
+          status: 'success',
+          sessionId: sessionId || undefined,
+        });
+        this.cleanupTask(taskId);
+        this.processQueue();
+        return;
+      }
+
+      this.autoRetryCounts.set(taskId, retryCount + 1);
+      callbacks.onDebug?.({
+        type: 'info',
+        message: `Auto-retrying after premature stop (${retryCount + 1}/${this.maxAutoRetries})`,
+        data: { taskId, sessionId, reason: payload.reason },
+      });
+
+      this.cleanupTask(taskId);
+
+      const retryPrompt = 'Continue. The previous attempt ended early without responding. Finish the task without stopping early.';
+      const retryConfig: TaskConfig = {
+        ...config,
+        sessionId: sessionId || undefined,
+        prompt: retryPrompt,
+      };
+
+      void this.executeTask(taskId, retryConfig, callbacks);
+    };
+
     // Attach listeners
     adapter.on('message', onMessage);
     adapter.on('progress', onProgress);
@@ -531,6 +616,7 @@ export class TaskManager {
     adapter.on('debug', onDebug);
     adapter.on('todo:update', onTodoUpdate);
     adapter.on('auth-error', onAuthError);
+    adapter.on('premature-stop', onPrematureStop);
 
     // Create cleanup function
     const cleanup = () => {
@@ -542,6 +628,7 @@ export class TaskManager {
       adapter.off('debug', onDebug);
       adapter.off('todo:update', onTodoUpdate);
       adapter.off('auth-error', onAuthError);
+      adapter.off('premature-stop', onPrematureStop);
       adapter.dispose();
     };
 
@@ -639,6 +726,7 @@ export class TaskManager {
     if (queueIndex !== -1) {
       console.log(`[TaskManager] Cancelling queued task ${taskId}`);
       this.taskQueue.splice(queueIndex, 1);
+      this.autoRetryCounts.delete(taskId);
       return;
     }
 
@@ -649,11 +737,14 @@ export class TaskManager {
       return;
     }
 
-    console.log(`[TaskManager] Cancelling running task ${taskId}`);
+    console.log(`[TaskManager] Cancelling running task ${taskId}`, {
+      activeTasks: this.activeTasks.size,
+    });
 
     try {
       await managedTask.adapter.cancelTask();
     } finally {
+      this.autoRetryCounts.delete(taskId);
       this.cleanupTask(taskId);
       // Process queue after cancellation
       this.processQueue();
@@ -672,7 +763,9 @@ export class TaskManager {
       return;
     }
 
-    console.log(`[TaskManager] Interrupting task ${taskId}`);
+    console.log(`[TaskManager] Interrupting task ${taskId}`, {
+      activeTasks: this.activeTasks.size,
+    });
     await managedTask.adapter.interruptTask();
   }
 
@@ -688,6 +781,7 @@ export class TaskManager {
 
     console.log(`[TaskManager] Removing task ${taskId} from queue`);
     this.taskQueue.splice(queueIndex, 1);
+    this.autoRetryCounts.delete(taskId);
     return true;
   }
 
@@ -792,6 +886,7 @@ export class TaskManager {
 
     // Clear the queue
     this.taskQueue = [];
+    this.autoRetryCounts.clear();
 
     for (const [taskId, managedTask] of this.activeTasks) {
       try {
