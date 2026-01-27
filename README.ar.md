@@ -11,7 +11,7 @@
   <a href="https://github.com/accomplish-ai/openwork/stargazers"><img src="https://img.shields.io/github/stars/accomplish-ai/openwork?style=flat-square&color=22c55e" alt="نجوم GitHub" /></a>
   <a href="https://github.com/accomplish-ai/openwork/issues"><img src="https://img.shields.io/github/issues/accomplish-ai/openwork?style=flat-square&color=22c55e" alt="مشكلات GitHub" /></a>
   <a href="https://github.com/accomplish-ai/openwork/commits"><img src="https://img.shields.io/github/last-commit/accomplish-ai/openwork?style=flat-square&color=22c55e" alt="آخر تحديث" /></a>
-  <a href="https://downloads.openwork.me/downloads/0.3.1/macos/Openwork-0.3.1-mac-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS-0ea5e9?style=flat-square" alt="تحميل لـ macOS" /></a>
+  <a href="https://downloads.openwork.me/downloads/0.3.4/macos/Openwork-0.3.4-mac-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS-0ea5e9?style=flat-square" alt="تحميل لـ macOS" /></a>
 </p>
 
 # Openwork™ - وكيل سطح مكتب ذكاء اصطناعي مفتوح المصدر
@@ -23,7 +23,7 @@ Openwork هو وكيل سطح مكتب ذكاء اصطناعي مفتوح الم
 </p>
 
 <p align="center">
-  <a href="https://downloads.openwork.me/downloads/0.3.1/macos/Openwork-0.3.1-mac-arm64.dmg"><strong>تحميل Openwork لـ Mac (Apple Silicon)</strong></a>
+  <a href="https://downloads.openwork.me/downloads/0.3.4/macos/Openwork-0.3.4-mac-arm64.dmg"><strong>تحميل Openwork لـ Mac (Apple Silicon)</strong></a>
   ·
   <a href="https://www.openwork.me/">موقع Openwork</a>
   ·
@@ -183,7 +183,7 @@ Openwork هو وكيل سطح مكتب ذكاء اصطناعي مفتوح الم
 
 <div align="center">
 
-[**تحميل لـ Mac (Apple Silicon)**](https://downloads.openwork.me/downloads/0.3.1/macos/Openwork-0.3.1-mac-arm64.dmg)
+[**تحميل لـ Mac (Apple Silicon)**](https://downloads.openwork.me/downloads/0.3.4/macos/Openwork-0.3.4-mac-arm64.dmg)
 
 </div>
 

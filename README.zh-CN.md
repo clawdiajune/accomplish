@@ -11,7 +11,7 @@
   <a href="https://github.com/accomplish-ai/openwork/stargazers"><img src="https://img.shields.io/github/stars/accomplish-ai/openwork?style=flat-square&color=22c55e" alt="GitHub Stars" /></a>
   <a href="https://github.com/accomplish-ai/openwork/issues"><img src="https://img.shields.io/github/issues/accomplish-ai/openwork?style=flat-square&color=22c55e" alt="GitHub Issues" /></a>
   <a href="https://github.com/accomplish-ai/openwork/commits"><img src="https://img.shields.io/github/last-commit/accomplish-ai/openwork?style=flat-square&color=22c55e" alt="最近提交" /></a>
-  <a href="https://downloads.openwork.me/downloads/0.3.1/macos/Openwork-0.3.1-mac-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS-0ea5e9?style=flat-square" alt="下载 macOS 版" /></a>
+  <a href="https://downloads.openwork.me/downloads/0.3.4/macos/Openwork-0.3.4-mac-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS-0ea5e9?style=flat-square" alt="下载 macOS 版" /></a>
 </p>
 
 # Openwork™ - 开源 AI 桌面代理
@@ -23,7 +23,7 @@ Openwork 是一款开源 AI 桌面代理，可在您的本地机器上自动化�
 </p>
 
 <p align="center">
-  <a href="https://downloads.openwork.me/downloads/0.3.1/macos/Openwork-0.3.1-mac-arm64.dmg"><strong>下载 Mac 版 Openwork（Apple Silicon）</strong></a>
+  <a href="https://downloads.openwork.me/downloads/0.3.4/macos/Openwork-0.3.4-mac-arm64.dmg"><strong>下载 Mac 版 Openwork（Apple Silicon）</strong></a>
   ·
   <a href="https://www.openwork.me/">Openwork 官网</a>
   ·
@@ -183,7 +183,7 @@ Openwork 在您的机器上本地运行。您的文件保留在您的设备上�
 
 <div align="center">
 
-[**下载 Mac 版（Apple Silicon）**](https://downloads.openwork.me/downloads/0.3.1/macos/Openwork-0.3.1-mac-arm64.dmg)
+[**下载 Mac 版（Apple Silicon）**](https://downloads.openwork.me/downloads/0.3.4/macos/Openwork-0.3.4-mac-arm64.dmg)
 
 </div>
 
