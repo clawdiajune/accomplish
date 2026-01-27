@@ -41,6 +41,7 @@ export class CompletionEnforcer {
   private state: CompletionState;
   private callbacks: CompletionEnforcerCallbacks;
   private currentTodos: TodoItem[] = [];
+  private toolsWereUsed: boolean = false;
 
   constructor(callbacks: CompletionEnforcerCallbacks, maxContinuationAttempts: number = 20) {
     this.callbacks = callbacks;
@@ -57,6 +58,14 @@ export class CompletionEnforcer {
       `Todo list updated: ${todos.length} items`,
       { todos }
     );
+  }
+
+  /**
+   * Mark that tools were used during this task invocation.
+   * Called by the adapter when any tool_call or tool_use is detected.
+   */
+  markToolsUsed(): void {
+    this.toolsWereUsed = true;
   }
 
   /**
@@ -132,13 +141,23 @@ export class CompletionEnforcer {
 
     // Check if agent stopped without calling complete_task
     if (!this.state.isCompleteTaskCalled()) {
-      // Try to schedule a continuation
+      // If no tools were used, this was a conversational response (e.g., "hey").
+      // Don't force continuation — just complete the task.
+      if (!this.toolsWereUsed) {
+        this.callbacks.onDebug(
+          'skip_continuation',
+          'No tools used and no complete_task called — treating as conversational response'
+        );
+        return 'complete';
+      }
+
+      // Tools were used but no complete_task — agent stopped prematurely
       if (this.state.scheduleContinuation()) {
         this.callbacks.onDebug(
           'continuation',
           `Scheduled continuation prompt (attempt ${this.state.getContinuationAttempts()})`
         );
-        return 'pending'; // Let handleProcessExit start continuation
+        return 'pending';
       }
 
       // Max retries reached or invalid state
@@ -220,6 +239,7 @@ export class CompletionEnforcer {
   reset(): void {
     this.state.reset();
     this.currentTodos = [];
+    this.toolsWereUsed = false;
   }
 
   private hasIncompleteTodos(): boolean {
