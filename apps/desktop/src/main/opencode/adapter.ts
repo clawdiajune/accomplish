@@ -108,9 +108,6 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
    */
   private createCompletionEnforcer(): CompletionEnforcer {
     const callbacks: CompletionEnforcerCallbacks = {
-      onStartVerification: async (prompt: string) => {
-        await this.spawnSessionResumption(prompt);
-      },
       onStartContinuation: async (prompt: string) => {
         await this.spawnSessionResumption(prompt);
       },
@@ -868,6 +865,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           }
         }
 
+        // Notify completion enforcer that tools were used in this invocation
+        this.completionEnforcer.markToolsUsed();
+
         // COMPLETION ENFORCEMENT: Track complete_task tool calls
         // Tool name may be prefixed with MCP server name (e.g., "complete-task_complete_task")
         // so we use endsWith() for fuzzy matching
@@ -914,6 +914,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
             this.waitingTransitionTimer = null;
           }
         }
+
+        // Notify completion enforcer that tools were used in this invocation
+        this.completionEnforcer.markToolsUsed();
 
         // Track if complete_task was called (tool name may be prefixed with MCP server name)
         if (toolUseName === 'complete_task' || toolUseName.endsWith('_complete_task')) {
