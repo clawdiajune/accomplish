@@ -22,6 +22,16 @@ if (process.env.OPENWORK_POSTINSTALL_RUNNING) {
 process.env.OPENWORK_POSTINSTALL_RUNNING = '1';
 
 const isWindows = process.platform === 'win32';
+const skipPlaywrightDownloads =
+  process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD === '1' ||
+  process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD === 'true' ||
+  process.env.OPENWORK_SKIP_PLAYWRIGHT_DOWNLOAD === '1' ||
+  process.env.OPENWORK_SKIP_PLAYWRIGHT_DOWNLOAD === 'true' ||
+  process.env.CI === 'true';
+
+if (skipPlaywrightDownloads) {
+  console.log('> Skipping Playwright browser downloads (CI or OPENWORK_SKIP_PLAYWRIGHT_DOWNLOAD set)');
+}
 
 function runCommand(command, description) {
   console.log(`\n> ${description}...`);
@@ -30,7 +40,11 @@ function runCommand(command, description) {
       stdio: 'inherit',
       cwd: path.join(__dirname, '..'),
       shell: true,
-      env: { ...process.env, OPENWORK_POSTINSTALL_RUNNING: '1' }
+      env: {
+        ...process.env,
+        OPENWORK_POSTINSTALL_RUNNING: '1',
+        ...(skipPlaywrightDownloads ? { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' } : {})
+      }
     });
   } catch (error) {
     console.error(`Failed: ${description}`);
