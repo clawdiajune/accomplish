@@ -412,6 +412,14 @@ export function registerIPCHandlers(): void {
         // Flush any pending messages before completing
         flushAndCleanupBatcher(taskId);
 
+        console.log('[IPC] Task complete', {
+          taskId,
+          status: result.status,
+          sessionId: result.sessionId,
+          durationMs: result.durationMs,
+          error: result.error,
+        });
+
         forwardToRenderer('task:update', {
           taskId,
           type: 'complete',
@@ -441,6 +449,8 @@ export function registerIPCHandlers(): void {
       onError: (error: Error) => {
         // Flush any pending messages before error
         flushAndCleanupBatcher(taskId);
+
+        console.error('[IPC] Task error', { taskId, error: error.message });
 
         forwardToRenderer('task:update', {
           taskId,
@@ -516,6 +526,7 @@ export function registerIPCHandlers(): void {
 
     // Check if it's a queued task first
     if (taskManager.isTaskQueued(taskId)) {
+      console.log('[IPC] Cancelling queued task', { taskId });
       taskManager.cancelQueuedTask(taskId);
       updateTaskStatus(taskId, 'cancelled', new Date().toISOString());
       return;
@@ -523,6 +534,7 @@ export function registerIPCHandlers(): void {
 
     // Otherwise cancel the running task
     if (taskManager.hasActiveTask(taskId)) {
+      console.log('[IPC] Cancelling running task', { taskId });
       await taskManager.cancelTask(taskId);
       updateTaskStatus(taskId, 'cancelled', new Date().toISOString());
     }
@@ -533,6 +545,7 @@ export function registerIPCHandlers(): void {
     if (!taskId) return;
 
     if (taskManager.hasActiveTask(taskId)) {
+      console.log('[IPC] Interrupting task', { taskId });
       await taskManager.interruptTask(taskId);
       // Note: Don't change task status - task is still running, just interrupted
       console.log(`[IPC] Task ${taskId} interrupted`);
@@ -680,6 +693,14 @@ export function registerIPCHandlers(): void {
         // Flush any pending messages before completing
         flushAndCleanupBatcher(taskId);
 
+        console.log('[IPC] Task complete (resume)', {
+          taskId,
+          status: result.status,
+          sessionId: result.sessionId,
+          durationMs: result.durationMs,
+          error: result.error,
+        });
+
         forwardToRenderer('task:update', {
           taskId,
           type: 'complete',
@@ -709,6 +730,8 @@ export function registerIPCHandlers(): void {
       onError: (error: Error) => {
         // Flush any pending messages before error
         flushAndCleanupBatcher(taskId);
+
+        console.error('[IPC] Task error (resume)', { taskId, error: error.message });
 
         forwardToRenderer('task:update', {
           taskId,

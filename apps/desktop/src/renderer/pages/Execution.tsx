@@ -475,8 +475,18 @@ export default function ExecutionPage() {
 
     // If denied on a question, also interrupt the task
     if (!allowed && isQuestion) {
+      console.info('[Execution] Permission denied; interrupting task', {
+        taskId: currentTask.id,
+        requestId: permissionRequest.id,
+      });
       interruptTask();
     }
+  };
+
+  const handleStopClick = () => {
+    if (!currentTask) return;
+    console.info('[Execution] Stop button clicked', { taskId: currentTask.id });
+    interruptTask();
   };
 
   if (error) {
@@ -1130,7 +1140,7 @@ export default function ExecutionPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={interruptTask}
+              onClick={handleStopClick}
               title="Stop agent (Ctrl+C)"
               className="shrink-0 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
               data-testid="execution-stop-button"

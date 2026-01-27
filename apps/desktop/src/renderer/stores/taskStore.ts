@@ -300,6 +300,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const accomplish = getAccomplish();
     const { currentTask } = get();
     if (currentTask) {
+      console.info('[TaskStore] cancelTask requested', { taskId: currentTask.id, status: currentTask.status });
       void accomplish.logEvent({
         level: 'info',
         message: 'UI cancel task',
@@ -321,6 +322,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const accomplish = getAccomplish();
     const { currentTask } = get();
     if (currentTask && currentTask.status === 'running') {
+      console.info('[TaskStore] interruptTask requested', { taskId: currentTask.id, status: currentTask.status });
       void accomplish.logEvent({
         level: 'info',
         message: 'UI interrupt task',
