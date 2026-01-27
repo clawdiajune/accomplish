@@ -323,14 +323,27 @@ jobs:
           $tailErr = Start-Job -ScriptBlock { param($p) Get-Content -Path $p -Wait } -ArgumentList $err
 
           while (-not $proc.HasExited) {
+            Write-Host "[heartbeat] tick"
             $file = Get-ChildItem release -Filter "*.nsis.7z" -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($file) {
-              Write-Host ("[heartbeat] {0} {1} MB" -f $file.Name, [math]::Round($file.Length/1MB,2))
+              Write-Host ("[heartbeat] archive {0} {1} MB" -f $file.Name, [math]::Round($file.Length/1MB,2))
+            } else {
+              Write-Host "[heartbeat] archive not found yet"
+            }
+            $latest = Get-ChildItem release -File -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($latest) {
+              Write-Host ("[heartbeat] latest release file {0} {1} MB" -f $latest.Name, [math]::Round($latest.Length/1MB,2))
+            } else {
+              Write-Host "[heartbeat] no files in release yet"
             }
             $p = Get-Process 7za -ErrorAction SilentlyContinue
             if ($p) {
-              Write-Host ("[heartbeat] 7za cpu={0}s mem={1}MB" -f [math]::Round($p.CPU,1), [math]::Round($p.WorkingSet/1MB,1))
+              $count = @($p).Count
+              Write-Host ("[heartbeat] 7za count={0} cpu={1}s mem={2}MB" -f $count, [math]::Round($p[0].CPU,1), [math]::Round($p[0].WorkingSet/1MB,1))
+            } else {
+              Write-Host "[heartbeat] 7za not running"
             }
             Receive-Job $tailOut -Keep | ForEach-Object { Write-Host $_ }
             Receive-Job $tailErr -Keep | ForEach-Object { Write-Host "[stderr] $_" }
