@@ -196,6 +196,8 @@ export class CompletionEnforcer {
         { remainingWork: args?.remaining_work, summary: args?.summary }
       );
 
+      // Reset tool-use flag so the next invocation is evaluated fresh
+      this.toolsWereUsed = false;
       await this.callbacks.onStartContinuation(prompt);
       return;
     }
@@ -211,6 +213,8 @@ export class CompletionEnforcer {
         `Starting continuation task (attempt ${this.state.getContinuationAttempts()})`
       );
 
+      // Reset tool-use flag so the next invocation is evaluated fresh
+      this.toolsWereUsed = false;
       await this.callbacks.onStartContinuation(prompt);
       return;
     }

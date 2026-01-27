@@ -72,6 +72,11 @@ describe('CompletionEnforcer', () => {
       const action = enforcer.handleStepFinish('tool_use');
       expect(action).toBe('continue');
     });
+
+    it('should return complete for end_turn when no tools used', () => {
+      const action = enforcer.handleStepFinish('end_turn');
+      expect(action).toBe('complete');
+    });
   });
 
   describe('continuation with tools used', () => {
@@ -82,6 +87,19 @@ describe('CompletionEnforcer', () => {
       await enforcer.handleProcessExit(0);
 
       expect(callbacks.onStartContinuation).toHaveBeenCalled();
+    });
+
+    it('should reset toolsWereUsed between continuation attempts', async () => {
+      // First invocation: agent uses tools, stops without complete_task
+      enforcer.markToolsUsed();
+      enforcer.handleStepFinish('stop'); // pending
+
+      await enforcer.handleProcessExit(0); // spawns continuation, resets flag
+
+      // Second invocation: continuation response has NO tools and NO complete_task
+      // Should complete immediately (not loop)
+      const action = enforcer.handleStepFinish('stop');
+      expect(action).toBe('complete');
     });
 
     it('should call onComplete on process exit when no tools used', async () => {
