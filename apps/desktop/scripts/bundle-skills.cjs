@@ -33,12 +33,14 @@ const bundles = [
     entry: 'scripts/start-server.ts',
     outfile: 'dist/start-server.mjs',
     external: ['playwright'],
+    banner: true,
   },
   {
     name: 'dev-browser',
     entry: 'scripts/start-relay.ts',
     outfile: 'dist/start-relay.mjs',
     external: ['playwright'],
+    banner: true,
   },
 ];
 
@@ -48,7 +50,7 @@ function ensureDir(dirPath) {
   }
 }
 
-async function bundleSkill({ name, entry, outfile, external = [] }) {
+async function bundleSkill({ name, entry, outfile, external = [], banner: needsBanner }) {
   const skillDir = path.join(skillsDir, name);
   const absEntry = path.join(skillDir, entry);
   const absOutfile = path.join(skillDir, outfile);
@@ -68,6 +70,11 @@ async function bundleSkill({ name, entry, outfile, external = [] }) {
     bundle: true,
     platform: 'node',
     format: 'esm',
+    ...(needsBanner && {
+      banner: {
+        js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+      },
+    }),
     target: 'node20',
     sourcemap: false,
     logLevel: 'info',
