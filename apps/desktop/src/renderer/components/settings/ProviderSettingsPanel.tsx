@@ -10,6 +10,7 @@ import {
   OllamaProviderForm,
   OpenRouterProviderForm,
   LiteLLMProviderForm,
+  LMStudioProviderForm,
 } from './providers';
 import { ZaiProviderForm } from './providers/ZaiProviderForm';
 import { settingsVariants, settingsTransitions } from '@/lib/animations';
@@ -85,6 +86,19 @@ export function ProviderSettingsPanel({
         );
 
       case 'local':
+        // Handle different local providers
+        if (providerId === 'lmstudio') {
+          return (
+            <LMStudioProviderForm
+              connectedProvider={connectedProvider}
+              onConnect={onConnect}
+              onDisconnect={onDisconnect}
+              onModelChange={onModelChange}
+              showModelError={showModelError}
+            />
+          );
+        }
+        // Default to Ollama for other local providers
         return (
           <OllamaProviderForm
             connectedProvider={connectedProvider}

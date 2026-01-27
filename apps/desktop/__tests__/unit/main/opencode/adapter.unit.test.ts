@@ -118,6 +118,7 @@ vi.mock('@main/store/secureStorage', () => ({
 vi.mock('@main/store/appSettings', () => ({
   getSelectedModel: vi.fn(() => ({ model: 'claude-3-opus-20240229' })),
   getAzureFoundryConfig: vi.fn(() => null),
+  getOpenAiBaseUrl: vi.fn(() => ''),
 }));
 
 // Mock provider settings (uses SQLite which isn't available in tests)
@@ -578,6 +579,68 @@ describe('OpenCode Adapter Module', () => {
         const req = permissionRequests[0] as { question: string; options: Array<{ label: string }> };
         expect(req.question).toBe('Do you want to proceed?');
         expect(req.options).toHaveLength(2);
+      });
+
+      it('should emit todo:update for non-empty todos', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const todoEvents: unknown[][] = [];
+        adapter.on('todo:update', (todos) => todoEvents.push(todos));
+
+        await adapter.startTask({ prompt: 'Test' });
+
+        const toolCallMessage: OpenCodeToolCallMessage = {
+          type: 'tool_call',
+          part: {
+            id: 'tool-1',
+            sessionID: 'session-123',
+            messageID: 'message-123',
+            type: 'tool-call',
+            tool: 'todowrite',
+            input: {
+              todos: [
+                { id: 'todo-1', content: 'First task', status: 'pending' },
+                { id: 'todo-2', content: 'Second task', status: 'in_progress' },
+              ],
+            },
+          },
+        };
+
+        // Act
+        mockPtyInstance.simulateData(JSON.stringify(toolCallMessage) + '\n');
+
+        // Assert
+        expect(todoEvents.length).toBe(1);
+        expect(todoEvents[0]).toHaveLength(2);
+      });
+
+      it('should NOT emit todo:update for empty todos array', async () => {
+        // Arrange
+        const adapter = new OpenCodeAdapter();
+        const todoEvents: unknown[][] = [];
+        adapter.on('todo:update', (todos) => todoEvents.push(todos));
+
+        await adapter.startTask({ prompt: 'Test' });
+
+        const toolCallMessage: OpenCodeToolCallMessage = {
+          type: 'tool_call',
+          part: {
+            id: 'tool-1',
+            sessionID: 'session-123',
+            messageID: 'message-123',
+            type: 'tool-call',
+            tool: 'todowrite',
+            input: {
+              todos: [],
+            },
+          },
+        };
+
+        // Act
+        mockPtyInstance.simulateData(JSON.stringify(toolCallMessage) + '\n');
+
+        // Assert - should NOT emit for empty array
+        expect(todoEvents.length).toBe(0);
       });
     });
 

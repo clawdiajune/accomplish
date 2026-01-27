@@ -11,7 +11,9 @@ export type ProviderId =
   | 'azure-foundry'
   | 'ollama'
   | 'openrouter'
-  | 'litellm';
+  | 'litellm'
+  | 'minimax'
+  | 'lmstudio';
 
 export type ProviderCategory = 'classic' | 'aws' | 'azure' | 'local' | 'proxy' | 'hybrid';
 
@@ -36,6 +38,8 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   ollama: { id: 'ollama', name: 'Ollama', category: 'local', label: 'Local Models', logoKey: 'olama' },
   openrouter: { id: 'openrouter', name: 'OpenRouter', category: 'proxy', label: 'Service', logoKey: 'open-router', helpUrl: 'https://openrouter.ai/keys' },
   litellm: { id: 'litellm', name: 'LiteLLM', category: 'hybrid', label: 'Service', logoKey: 'liteLLM' },
+  minimax: { id: 'minimax', name: 'MiniMax', category: 'classic', label: 'Service', logoKey: 'minimax', helpUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key' },
+  lmstudio: { id: 'lmstudio', name: 'LM Studio', category: 'local', label: 'Local Models', logoKey: 'lmstudio', helpUrl: 'https://lmstudio.ai/' },
 };
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -78,12 +82,22 @@ export interface ZaiCredentials {
   region: ZaiRegion;
 }
 
+export interface LMStudioCredentials {
+  type: 'lmstudio';
+  serverUrl: string;
+}
+
 export interface AzureFoundryCredentials {
   type: 'azure-foundry';
   authMethod: 'api-key' | 'entra-id';
   endpoint: string;
   deploymentName: string;
   keyPrefix?: string; // Only for api-key auth
+}
+
+export interface OAuthCredentials {
+  type: 'oauth';
+  oauthProvider: 'chatgpt';
 }
 
 export type ProviderCredentials =
@@ -93,7 +107,19 @@ export type ProviderCredentials =
   | OpenRouterCredentials
   | LiteLLMCredentials
   | ZaiCredentials
-  | AzureFoundryCredentials;
+  | AzureFoundryCredentials
+  | LMStudioCredentials
+  | OAuthCredentials;
+
+/** Tool support status for a model */
+export type ToolSupportStatus = 'supported' | 'unsupported' | 'unknown';
+
+/** Model with tool support metadata */
+export interface ModelWithToolSupport {
+  id: string;
+  name: string;
+  toolSupport?: ToolSupportStatus;
+}
 
 export interface ConnectedProvider {
   providerId: ProviderId;
@@ -101,7 +127,7 @@ export interface ConnectedProvider {
   selectedModelId: string | null;
   credentials: ProviderCredentials;
   lastConnectedAt: string;
-  availableModels?: Array<{ id: string; name: string }>; // For dynamic providers
+  availableModels?: Array<{ id: string; name: string; toolSupport?: ToolSupportStatus }>; // For dynamic providers
 }
 
 export interface ProviderSettings {
@@ -131,7 +157,7 @@ export function getActiveProvider(settings: ProviderSettings | null | undefined)
  */
 export const DEFAULT_MODELS: Partial<Record<ProviderId, string>> = {
   anthropic: 'anthropic/claude-haiku-4-5',
-  openai: 'openai/gpt-5-codex',
+  openai: 'openai/gpt-5.2-codex',
   google: 'google/gemini-3-pro-preview',
   xai: 'xai/grok-4',
   bedrock: 'amazon-bedrock/anthropic.claude-haiku-4-5-20251001-v1:0',

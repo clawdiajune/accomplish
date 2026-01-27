@@ -12,7 +12,7 @@ import {
 } from './cli-path';
 import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
 // TODO: Remove getAzureFoundryConfig import in v0.4.0 when legacy support is dropped
-import { getSelectedModel, getAzureFoundryConfig } from '../store/appSettings';
+import { getSelectedModel, getAzureFoundryConfig, getOpenAiBaseUrl } from '../store/appSettings';
 import { getActiveProviderModel, getConnectedProvider } from '../store/providerSettings';
 import type { AzureFoundryCredentials } from '@accomplish/shared';
 import { generateOpenCodeConfig, ACCOMPLISH_AGENT_NAME, syncApiKeysToOpenCodeAuth } from './config-generator';
@@ -29,6 +29,7 @@ import type {
   TaskResult,
   OpenCodeMessage,
   PermissionRequest,
+  TodoItem,
 } from '@accomplish/shared';
 
 /**
@@ -66,6 +67,8 @@ export interface OpenCodeAdapterEvents {
   complete: [TaskResult];
   error: [Error];
   debug: [{ type: string; message: string; data?: unknown }];
+  'todo:update': [TodoItem[]];
+  'auth-error': [{ providerId: string; message: string }];
 }
 
 export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
@@ -152,6 +155,15 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
             message: error.message,
           },
         });
+
+        // Emit auth-error event if this is an authentication error
+        if (error.isAuthError && error.providerID) {
+          console.log('[OpenCode Adapter] Emitting auth-error for provider:', error.providerID);
+          this.emit('auth-error', {
+            providerId: error.providerID,
+            message: errorMessage,
+          });
+        }
 
         this.hasCompleted = true;
         this.emit('complete', {
@@ -631,9 +643,15 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       env.ANTHROPIC_API_KEY = apiKeys.anthropic;
       console.log('[OpenCode CLI] Using Anthropic API key from settings');
     }
+    const configuredOpenAiBaseUrl = getOpenAiBaseUrl().trim();
     if (apiKeys.openai) {
       env.OPENAI_API_KEY = apiKeys.openai;
       console.log('[OpenCode CLI] Using OpenAI API key from settings');
+
+      if (configuredOpenAiBaseUrl) {
+        env.OPENAI_BASE_URL = configuredOpenAiBaseUrl;
+        console.log('[OpenCode CLI] Using OPENAI_BASE_URL override from settings');
+      }
     }
     if (apiKeys.google) {
       env.GOOGLE_GENERATIVE_AI_API_KEY = apiKeys.google;
@@ -658,6 +676,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     if (apiKeys.litellm) {
       env.LITELLM_API_KEY = apiKeys.litellm;
       console.log('[OpenCode CLI] Using LiteLLM API key from settings');
+    }
+    if (apiKeys.minimax) {
+      env.MINIMAX_API_KEY = apiKeys.minimax;
+      console.log('[OpenCode CLI] Using MiniMax API key from settings');
     }
 
     // Set Bedrock credentials if configured
@@ -849,6 +871,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           this.completionEnforcer.handleCompleteTaskDetection(toolInput);
         }
 
+        // Detect todowrite tool calls and emit todo state
+        // Built-in tool name is 'todowrite', MCP-prefixed would be '*_todowrite'
+        if (toolName === 'todowrite' || toolName.endsWith('_todowrite')) {
+          const input = toolInput as { todos?: TodoItem[] };
+          // Only emit if we have actual todos (ignore empty arrays to prevent accidental clearing)
+          if (input?.todos && Array.isArray(input.todos) && input.todos.length > 0) {
+            this.emit('todo:update', input.todos);
+            // Also update completion enforcer
+            this.completionEnforcer.updateTodos(input.todos);
+          }
+        }
+
         this.emit('tool-use', toolName, toolInput);
         this.emit('progress', {
           stage: 'tool-use',
@@ -880,6 +914,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         // Track if complete_task was called (tool name may be prefixed with MCP server name)
         if (toolUseName === 'complete_task' || toolUseName.endsWith('_complete_task')) {
           this.completionEnforcer.handleCompleteTaskDetection(toolUseInput);
+        }
+
+        // Detect todowrite tool calls and emit todo state
+        // Built-in tool name is 'todowrite', MCP-prefixed would be '*_todowrite'
+        if (toolUseName === 'todowrite' || toolUseName.endsWith('_todowrite')) {
+          const input = toolUseInput as { todos?: TodoItem[] };
+          // Only emit if we have actual todos (ignore empty arrays to prevent accidental clearing)
+          if (input?.todos && Array.isArray(input.todos) && input.todos.length > 0) {
+            this.emit('todo:update', input.todos);
+            // Also update completion enforcer
+            this.completionEnforcer.updateTodos(input.todos);
+          }
         }
 
         // For models that don't emit text messages (like Gemini), emit the tool description

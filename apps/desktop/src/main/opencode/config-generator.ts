@@ -2,7 +2,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { PERMISSION_API_PORT, QUESTION_API_PORT } from '../permission-api';
-import { getOllamaConfig } from '../store/appSettings';
+import { getOllamaConfig, getLMStudioConfig } from '../store/appSettings';
 import { getApiKey } from '../store/secureStorage';
 import { getProviderSettings, getActiveProviderModel, getConnectedProviderIds } from '../store/providerSettings';
 import { ensureAzureFoundryProxy } from './azure-foundry-proxy';
@@ -145,41 +145,54 @@ See the ask-user-question skill for full documentation and examples.
 </important>
 
 <behavior name="task-planning">
-**TASK PLANNING - REQUIRED FOR EVERY TASK**
+##############################################################################
+# CRITICAL: PLAN FIRST, THEN USE TODOWRITE - BOTH ARE MANDATORY
+##############################################################################
+
+**STEP 1: OUTPUT A PLAN (before any action)**
 
 Before taking ANY action, you MUST first output a plan:
 
 1. **State the goal** - What the user wants accomplished
-2. **List steps with verification** - Numbered steps, each with a completion criterion
+2. **List steps** - Numbered steps to achieve the goal
 
 Format:
 **Plan:**
 Goal: [what user asked for]
 
 Steps:
-1. [Action] → verify: [how to confirm it's done]
-2. [Action] → verify: [how to confirm it's done]
+1. [First action]
+2. [Second action]
 ...
 
-Then execute the steps. When calling \`complete_task\`:
-- Review each step's verification criterion
-- Only use status "success" if ALL criteria are met
-- Use "partial" if some steps incomplete, list which ones in \`remaining_work\`
+**STEP 2: IMMEDIATELY CALL TODOWRITE**
 
-**Example:**
-Goal: Extract analytics data from a website
+After outputting your plan, you MUST call the \`todowrite\` tool to create your task list.
+This is NOT optional. The user sees your todos in a sidebar - if you skip this, they see nothing.
 
-Steps:
-1. Navigate to URL → verify: page title contains expected text
-2. Locate data section → verify: can see the target metrics
-3. Extract values → verify: have captured specific numbers
-4. Report findings → verify: summary includes all extracted data
+\`\`\`json
+{
+  "todos": [
+    {"id": "1", "content": "First step description", "status": "in_progress", "priority": "high"},
+    {"id": "2", "content": "Second step description", "status": "pending", "priority": "medium"},
+    {"id": "3", "content": "Third step description", "status": "pending", "priority": "medium"}
+  ]
+}
+\`\`\`
+
+**STEP 3: COMPLETE ALL TODOS BEFORE FINISHING**
+- All todos must be "completed" or "cancelled" before calling complete_task
+
+WRONG: Starting work without planning and calling todowrite first
+CORRECT: Output plan FIRST, call todowrite SECOND, then start working
+
+##############################################################################
 </behavior>
 
 <behavior>
 - Use AskUserQuestion tool for clarifying questions before starting ambiguous tasks
-- Use MCP tools directly - browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, browser_sequence
 - **NEVER use shell commands (open, xdg-open, start, subprocess, webbrowser) to open browsers or URLs** - these open the user's default browser, not the automation-controlled Chrome. ALL browser operations MUST use browser_* MCP tools.
+- For multi-step browser workflows, prefer \`browser_script\` over individual tools - it's faster and auto-returns page state.
 
 **BROWSER ACTION VERBOSITY - Be descriptive about web interactions:**
 - Before each browser action, briefly explain what you're about to do in user terms
@@ -337,7 +350,21 @@ interface ZaiProviderConfig {
   models: Record<string, ZaiProviderModelConfig>;
 }
 
-type ProviderConfig = OllamaProviderConfig | BedrockProviderConfig | AzureFoundryProviderConfig | OpenRouterProviderConfig | LiteLLMProviderConfig | ZaiProviderConfig;
+interface LMStudioProviderModelConfig {
+  name: string;
+  tools?: boolean;
+}
+
+interface LMStudioProviderConfig {
+  npm: string;
+  name: string;
+  options: {
+    baseURL: string;
+  };
+  models: Record<string, LMStudioProviderModelConfig>;
+}
+
+type ProviderConfig = OllamaProviderConfig | BedrockProviderConfig | AzureFoundryProviderConfig | OpenRouterProviderConfig | LiteLLMProviderConfig | ZaiProviderConfig | LMStudioProviderConfig;
 
 interface OpenCodeConfig {
   $schema?: string;
@@ -451,10 +478,12 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     ollama: 'ollama',
     openrouter: 'openrouter',
     litellm: 'litellm',
+    minimax: 'minimax',
+    lmstudio: 'lmstudio',
   };
 
   // Build enabled providers list from new settings or fall back to base providers
-  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'amazon-bedrock'];
+  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'zai-coding-plan', 'amazon-bedrock', 'minimax'];
   let enabledProviders = baseProviders;
 
   // If we have connected providers in the new settings, use those
@@ -640,6 +669,60 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     }
   }
 
+  // Configure LM Studio if connected
+  const lmstudioProvider = providerSettings.connectedProviders.lmstudio;
+  if (lmstudioProvider?.connectionStatus === 'connected' && lmstudioProvider.credentials.type === 'lmstudio') {
+    if (lmstudioProvider.selectedModelId) {
+      // OpenCode CLI splits "lmstudio/model" into provider="lmstudio" and modelID="model"
+      // So we need to register the model without the "lmstudio/" prefix
+      const modelId = lmstudioProvider.selectedModelId.replace(/^lmstudio\//, '');
+
+      // Check if the model supports tools from the availableModels metadata
+      const modelInfo = lmstudioProvider.availableModels?.find(
+        m => m.id === lmstudioProvider.selectedModelId || m.id === modelId
+      );
+      const supportsTools = (modelInfo as { toolSupport?: string })?.toolSupport === 'supported';
+
+      providerConfig.lmstudio = {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'LM Studio',
+        options: {
+          baseURL: `${lmstudioProvider.credentials.serverUrl}/v1`,
+        },
+        models: {
+          [modelId]: {
+            name: modelId,
+            tools: supportsTools,
+          },
+        },
+      };
+      console.log(`[OpenCode Config] LM Studio configured: ${modelId} (tools: ${supportsTools})`);
+    }
+  } else {
+    // Legacy fallback: use old LM Studio config if it exists
+    const lmstudioConfig = getLMStudioConfig();
+    if (lmstudioConfig?.enabled && lmstudioConfig.models && lmstudioConfig.models.length > 0) {
+      const lmstudioModels: Record<string, LMStudioProviderModelConfig> = {};
+      for (const model of lmstudioConfig.models) {
+        lmstudioModels[model.id] = {
+          name: model.name,
+          tools: model.toolSupport === 'supported',
+        };
+      }
+
+      providerConfig.lmstudio = {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'LM Studio',
+        options: {
+          baseURL: `${lmstudioConfig.baseUrl}/v1`,
+        },
+        models: lmstudioModels,
+      };
+
+      console.log('[OpenCode Config] LM Studio configured from legacy settings:', Object.keys(lmstudioModels));
+    }
+  }
+
   // Configure Azure Foundry if connected (check new settings first, then legacy)
   const azureFoundryProvider = providerSettings.connectedProviders['azure-foundry'];
   if (azureFoundryProvider?.connectionStatus === 'connected' && azureFoundryProvider.credentials.type === 'azure-foundry') {
@@ -729,7 +812,11 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     // Auto-allow all tool permissions - the system prompt instructs the agent to use
     // AskUserQuestion for user confirmations, which shows in the UI as an interactive modal.
     // CLI-level permission prompts don't show in the UI and would block task execution.
-    permission: 'allow',
+    // Note: todowrite is disabled by default and must be explicitly enabled.
+    permission: {
+      '*': 'allow',
+      todowrite: 'allow',
+    },
     provider: Object.keys(providerConfig).length > 0 ? providerConfig : undefined,
     agent: {
       [ACCOMPLISH_AGENT_NAME]: {
@@ -739,6 +826,7 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
       },
     },
     // MCP servers for additional tools
+    // Timeout set to 30000ms to handle slow npx startup on Windows
     mcp: {
       'file-permission': {
         type: 'local',
@@ -747,7 +835,7 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
         environment: {
           PERMISSION_API_PORT: String(PERMISSION_API_PORT),
         },
-        timeout: 10000,
+        timeout: 30000,
       },
       'ask-user-question': {
         type: 'local',
@@ -756,20 +844,20 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
         environment: {
           QUESTION_API_PORT: String(QUESTION_API_PORT),
         },
-        timeout: 10000,
+        timeout: 30000,
       },
       'dev-browser-mcp': {
         type: 'local',
         command: ['npx', 'tsx', path.join(skillsPath, 'dev-browser-mcp', 'src', 'index.ts')],
         enabled: true,
-        timeout: 30000,  // Longer timeout for browser operations
+        timeout: 30000,
       },
       // Provides complete_task tool - agent must call to signal task completion
       'complete-task': {
         type: 'local',
         command: ['npx', 'tsx', path.join(skillsPath, 'complete-task', 'src', 'index.ts')],
         enabled: true,
-        timeout: 5000,
+        timeout: 30000,
       },
     },
   };
@@ -858,6 +946,15 @@ export async function syncApiKeysToOpenCodeAuth(): Promise<void> {
       auth['zai-coding-plan'] = { type: 'api', key: apiKeys.zai };
       updated = true;
       console.log('[OpenCode Auth] Synced Z.AI Coding Plan API key');
+    }
+  }
+
+  // Sync MiniMax API key
+  if (apiKeys.minimax) {
+    if (!auth.minimax || auth.minimax.key !== apiKeys.minimax) {
+      auth.minimax = { type: 'api', key: apiKeys.minimax };
+      updated = true;
+      console.log('[OpenCode Auth] Synced MiniMax API key');
     }
   }
 
