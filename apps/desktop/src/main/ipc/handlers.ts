@@ -113,7 +113,7 @@ import {
 } from '../test-utils/mock-task-flow';
 
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'moonshot', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax', 'lmstudio', 'elevenlabs', 'huggingface']);
+const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'moonshot', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax', 'lmstudio', 'elevenlabs']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
 interface OllamaModel {
@@ -1733,61 +1733,175 @@ export function registerIPCHandlers(): void {
     });
   });
 
-  // HuggingFace handlers
-  handle('huggingface:validate', async (_event: IpcMainInvokeEvent, token: string) => {
-    console.log('[HuggingFace] Validating token...');
-    if (!token?.trim()) {
-      return { valid: false, error: 'Token is required' };
+  // HuggingFace TGI: Test tool support for a model
+  async function testHuggingFaceModelToolSupport(
+    baseUrl: string,
+    modelId: string
+  ): Promise<ToolSupportStatus> {
+    const testPayload = {
+      model: modelId,
+      messages: [
+        { role: 'user', content: 'What is the current time? You must use the get_current_time tool.' }
+      ],
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'get_current_time',
+            description: 'Gets the current time. Must be called to know what time it is.',
+            parameters: {
+              type: 'object',
+              properties: {
+                timezone: {
+                  type: 'string',
+                  description: 'Timezone (e.g., UTC, America/New_York)'
+                }
+              },
+              required: []
+            }
+          }
+        }
+      ],
+      tool_choice: 'required',
+      max_tokens: 100,
+    };
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (errorText.includes('tool') || errorText.includes('function')) {
+          console.log(`[HuggingFace TGI] Model ${modelId} does not support tools (error response)`);
+          return 'unsupported';
+        }
+        console.warn(`[HuggingFace TGI] Tool test failed for ${modelId}: ${response.status}`);
+        return 'unknown';
+      }
+
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            tool_calls?: Array<{ function?: { name: string } }>;
+          };
+          finish_reason?: string;
+        }>;
+      };
+
+      const choice = data.choices?.[0];
+      if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
+        console.log(`[HuggingFace TGI] Model ${modelId} supports tools (made tool call)`);
+        return 'supported';
+      }
+
+      if (choice?.finish_reason === 'tool_calls') {
+        console.log(`[HuggingFace TGI] Model ${modelId} supports tools (finish_reason)`);
+        return 'supported';
+      }
+
+      console.log(`[HuggingFace TGI] Model ${modelId} did not make tool call despite required - marking as unknown`);
+      return 'unknown';
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          console.warn(`[HuggingFace TGI] Tool test timed out for ${modelId}`);
+          return 'unknown';
+        }
+        if (error.message.includes('tool') || error.message.includes('function')) {
+          console.log(`[HuggingFace TGI] Model ${modelId} does not support tools (exception)`);
+          return 'unsupported';
+        }
+      }
+      console.warn(`[HuggingFace TGI] Tool test error for ${modelId}:`, error);
+      return 'unknown';
+    }
+  }
+
+  // HuggingFace TGI: Test connection and discover models
+  handle('huggingface:test-connection', async (_event: IpcMainInvokeEvent, url: string) => {
+    const sanitizedUrl = sanitizeString(url, 'huggingfaceUrl', 256);
+
+    // Validate URL format and protocol
+    try {
+      const parsed = new URL(sanitizedUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return { success: false, error: 'Only http and https URLs are allowed' };
+      }
+    } catch {
+      return { success: false, error: 'Invalid URL format' };
     }
 
     try {
+      // Fetch available models from TGI server
       const response = await fetchWithTimeout(
-        'https://huggingface.co/api/whoami-v2',
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token.trim()}`,
-          },
-        },
+        `${sanitizedUrl}/v1/models`,
+        { method: 'GET' },
         API_KEY_VALIDATION_TIMEOUT_MS
       );
 
-      console.log('[HuggingFace] Response status:', response.status);
-
       if (!response.ok) {
-        const errorBody = await response.text().catch(() => '');
-        console.log('[HuggingFace] Error response body:', errorBody);
-        if (response.status === 401) {
-          return { valid: false, error: 'Invalid token' };
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = (errorData as { error?: { message?: string } })?.error?.message || `API returned status ${response.status}`;
+        return { success: false, error: errorMessage };
+      }
+
+      const data = await response.json() as { data?: Array<{ id: string; object: string; owned_by?: string }> };
+      const rawModels = data.data || [];
+
+      if (rawModels.length === 0) {
+        return { success: false, error: 'No models found on the TGI server. Make sure a model is loaded.' };
+      }
+
+      console.log(`[HuggingFace TGI] Found ${rawModels.length} models, testing tool support...`);
+
+      // Test tool support for each model
+      const models: Array<{ id: string; name: string; toolSupport: ToolSupportStatus }> = [];
+
+      for (const m of rawModels) {
+        // Sanitize model ID: if it's a file path, extract the filename without extension
+        // This prevents slashes in model IDs from breaking the CLI --model arg format
+        let cleanId = m.id;
+        if (m.id.includes('/') || m.id.includes('\\')) {
+          const basename = m.id.split(/[/\\]/).pop() || m.id;
+          cleanId = basename.replace(/\.(gguf|bin|safetensors)$/i, '');
         }
-        return { valid: false, error: `API returned status ${response.status}` };
+
+        const displayName = cleanId
+          .replace(/-/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+
+        const toolSupport = await testHuggingFaceModelToolSupport(sanitizedUrl, m.id);
+
+        models.push({
+          id: cleanId,
+          name: displayName,
+          toolSupport,
+        });
+
+        console.log(`[HuggingFace TGI] Model ${m.id} -> ${cleanId}: toolSupport=${toolSupport}`);
       }
 
-      const data = await response.json();
-      console.log('[HuggingFace] Validation successful, user:', (data as { name?: string }).name);
-      return { valid: true };
+      console.log(`[HuggingFace TGI] Connection successful, found ${models.length} models`);
+      return { success: true, models };
     } catch (error) {
-      console.log('[HuggingFace] Validation error:', error);
+      const message = error instanceof Error ? error.message : 'Connection failed';
+      console.warn('[HuggingFace TGI] Connection failed:', message);
+
       if (error instanceof Error && error.name === 'AbortError') {
-        return { valid: false, error: 'Request timed out' };
+        return { success: false, error: 'Connection timed out. Make sure the TGI server is running.' };
       }
-      return { valid: false, error: error instanceof Error ? error.message : 'Validation failed' };
+      return { success: false, error: `Cannot connect to TGI server: ${message}` };
     }
-  });
-
-  handle('huggingface:fetch-models', async (_event: IpcMainInvokeEvent) => {
-    // Curated list of text-generation models with Inference Providers support
-    // Model IDs must match exactly what OpenCode supports (check suggestions in error messages)
-    const models = [
-      { id: 'deepseek-ai/DeepSeek-R1-0528', name: 'DeepSeek R1 (685B)' },
-      { id: 'deepseek-ai/DeepSeek-V3-0324', name: 'DeepSeek V3 (685B)' },
-      { id: 'Qwen/Qwen3-235B-A22B-Thinking-2507', name: 'Qwen3 235B Thinking' },
-      { id: 'Qwen/Qwen3-Coder-480B-A35B-Instruct', name: 'Qwen3 Coder 480B Instruct' },
-      { id: 'moonshotai/Kimi-K2-Instruct', name: 'Kimi K2 Instruct' },
-      { id: 'zai-org/GLM-4.5-Air', name: 'GLM 4.5 Air' },
-    ];
-
-    return { success: true, models };
   });
 
   // OpenRouter: Fetch available models

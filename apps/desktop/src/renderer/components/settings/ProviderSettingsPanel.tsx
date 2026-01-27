@@ -99,6 +99,17 @@ export function ProviderSettingsPanel({
             />
           );
         }
+        if (providerId === 'huggingface') {
+          return (
+            <HuggingFaceProviderForm
+              connectedProvider={connectedProvider}
+              onConnect={onConnect}
+              onDisconnect={onDisconnect}
+              onModelChange={onModelChange}
+              showModelError={showModelError}
+            />
+          );
+        }
         // Default to Ollama for other local providers
         return (
           <OllamaProviderForm
@@ -124,17 +135,6 @@ export function ProviderSettingsPanel({
       case 'hybrid':
         return (
           <LiteLLMProviderForm
-            connectedProvider={connectedProvider}
-            onConnect={onConnect}
-            onDisconnect={onDisconnect}
-            onModelChange={onModelChange}
-            showModelError={showModelError}
-          />
-        );
-
-      case 'huggingface':
-        return (
-          <HuggingFaceProviderForm
             connectedProvider={connectedProvider}
             onConnect={onConnect}
             onDisconnect={onDisconnect}

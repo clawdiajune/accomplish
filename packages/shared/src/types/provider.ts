@@ -388,9 +388,8 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
     id: 'huggingface',
     name: 'HuggingFace',
-    requiresApiKey: true,
-    apiKeyEnvVar: 'HF_TOKEN',
-    models: [], // Fetched dynamically
+    requiresApiKey: false,
+    models: [], // Fetched dynamically from local TGI server
   },
 ];
 

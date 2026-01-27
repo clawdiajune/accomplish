@@ -765,6 +765,36 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     }
   }
 
+  // Configure HuggingFace TGI if connected
+  const huggingfaceProvider = providerSettings.connectedProviders.huggingface;
+  if (huggingfaceProvider?.connectionStatus === 'connected' && huggingfaceProvider.credentials.type === 'huggingface') {
+    if (huggingfaceProvider.selectedModelId) {
+      // OpenCode CLI splits "huggingface/model" into provider="huggingface" and modelID="model"
+      const modelId = huggingfaceProvider.selectedModelId.replace(/^huggingface\//, '');
+
+      // Check if the model supports tools from the availableModels metadata
+      const modelInfo = huggingfaceProvider.availableModels?.find(
+        m => m.id === huggingfaceProvider.selectedModelId || m.id === modelId
+      );
+      const supportsTools = (modelInfo as { toolSupport?: string })?.toolSupport === 'supported';
+
+      providerConfig.huggingface = {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'HuggingFace TGI',
+        options: {
+          baseURL: `${huggingfaceProvider.credentials.serverUrl}/v1`,
+        },
+        models: {
+          [modelId]: {
+            name: modelId,
+            tools: supportsTools,
+          },
+        },
+      };
+      console.log(`[OpenCode Config] HuggingFace TGI configured: ${modelId} (tools: ${supportsTools})`);
+    }
+  }
+
   // Configure Azure Foundry if connected (check new settings first, then legacy)
   const azureFoundryProvider = providerSettings.connectedProviders['azure-foundry'];
   if (azureFoundryProvider?.connectionStatus === 'connected' && azureFoundryProvider.credentials.type === 'azure-foundry') {

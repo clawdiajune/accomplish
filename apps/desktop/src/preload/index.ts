@@ -42,7 +42,7 @@ const accomplishAPI = {
   // Settings
   getApiKeys: (): Promise<unknown[]> => ipcRenderer.invoke('settings:api-keys'),
   addApiKey: (
-    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'moonshot' | 'zai' | 'azure-foundry' | 'custom' | 'bedrock' | 'litellm' | 'lmstudio' | 'elevenlabs' | 'huggingface',
+    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'moonshot' | 'zai' | 'azure-foundry' | 'custom' | 'bedrock' | 'litellm' | 'lmstudio' | 'elevenlabs',
     key: string,
     label?: string
   ): Promise<unknown> =>
@@ -133,15 +133,12 @@ const accomplishAPI = {
   saveAzureFoundryConfig: (config: { endpoint: string; deploymentName: string; authType: 'api-key' | 'entra-id'; apiKey?: string }): Promise<void> =>
     ipcRenderer.invoke('azure-foundry:save-config', config),
 
-  // HuggingFace configuration
-  validateHuggingFaceToken: (token: string): Promise<{ valid: boolean; error?: string }> =>
-    ipcRenderer.invoke('huggingface:validate', token),
-
-  fetchHuggingFaceModels: (): Promise<{
+  // HuggingFace TGI configuration
+  testHuggingFaceConnection: (url: string): Promise<{
     success: boolean;
-    models?: Array<{ id: string; name: string }>;
+    models?: Array<{ id: string; name: string; toolSupport: 'supported' | 'unsupported' | 'unknown' }>;
     error?: string;
-  }> => ipcRenderer.invoke('huggingface:fetch-models'),
+  }> => ipcRenderer.invoke('huggingface:test-connection', url),
 
   // OpenRouter configuration
   fetchOpenRouterModels: (): Promise<{

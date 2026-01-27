@@ -1,12 +1,10 @@
 // apps/desktop/src/renderer/components/settings/providers/HuggingFaceProviderForm.tsx
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getAccomplish } from '@/lib/accomplish';
-import type { ConnectedProvider, HuggingFaceCredentials } from '@accomplish/shared';
-import { PROVIDER_META } from '@accomplish/shared';
+import type { ConnectedProvider, HuggingFaceCredentials, ToolSupportStatus } from '@accomplish/shared';
 import {
-  ModelSelector,
   ConnectButton,
   ConnectedControls,
   ProviderFormHeader,
@@ -17,6 +15,12 @@ import { settingsVariants, settingsTransitions } from '@/lib/animations';
 // Import HuggingFace logo
 import huggingfaceLogo from '/assets/ai-logos/huggingface.svg';
 
+interface HuggingFaceModel {
+  id: string;
+  name: string;
+  toolSupport: ToolSupportStatus;
+}
+
 interface HuggingFaceProviderFormProps {
   connectedProvider?: ConnectedProvider;
   onConnect: (provider: ConnectedProvider) => void;
@@ -25,7 +29,123 @@ interface HuggingFaceProviderFormProps {
   showModelError: boolean;
 }
 
-const OTHER_MODEL_ID = '__other__';
+/**
+ * Tool support badge component
+ */
+function ToolSupportBadge({ status }: { status: ToolSupportStatus }) {
+  const config = {
+    supported: {
+      label: 'Tools',
+      className: 'bg-green-500/20 text-green-400 border-green-500/30',
+      icon: (
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ),
+    },
+    unsupported: {
+      label: 'No Tools',
+      className: 'bg-red-500/20 text-red-400 border-red-500/30',
+      icon: (
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      ),
+    },
+    unknown: {
+      label: 'Unknown',
+      className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      icon: (
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
+        </svg>
+      ),
+    },
+  };
+
+  const { label, className, icon } = config[status];
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${className}`}>
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Custom model selector with tool support indicators
+ */
+function HuggingFaceModelSelector({
+  models,
+  value,
+  onChange,
+  error,
+}: {
+  models: HuggingFaceModel[];
+  value: string | null;
+  onChange: (modelId: string) => void;
+  error: boolean;
+}) {
+  // Sort models: supported first, then unknown, then unsupported
+  const sortedModels = [...models].sort((a, b) => {
+    const order: Record<ToolSupportStatus, number> = { supported: 0, unknown: 1, unsupported: 2 };
+    return order[a.toolSupport] - order[b.toolSupport];
+  });
+
+  const selectedModel = models.find(m => `huggingface/${m.id}` === value);
+  const hasUnsupportedSelected = selectedModel?.toolSupport === 'unsupported';
+  const hasUnknownSelected = selectedModel?.toolSupport === 'unknown';
+
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-medium text-foreground">Model</label>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full rounded-md border px-3 py-2.5 text-sm bg-background ${
+          error ? 'border-destructive' : 'border-input'
+        }`}
+      >
+        <option value="">Select a model...</option>
+        {sortedModels.map((model) => (
+          <option key={model.id} value={`huggingface/${model.id}`}>
+            {model.name} {model.toolSupport === 'supported' ? '\u2713' : model.toolSupport === 'unsupported' ? '\u2717' : '?'}
+          </option>
+        ))}
+      </select>
+
+      {/* Warning for unsupported or unknown models */}
+      {hasUnsupportedSelected && (
+        <div className="mt-2 flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+          <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <p className="font-medium">This model does not support tool/function calling</p>
+            <p className="text-red-400/80 mt-1">Tasks requiring browser automation or file operations will not work correctly.</p>
+          </div>
+        </div>
+      )}
+
+      {hasUnknownSelected && (
+        <div className="mt-2 flex items-start gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-400">
+          <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="font-medium">Tool support could not be verified</p>
+            <p className="text-yellow-400/80 mt-1">This model may or may not support tool/function calling. Test it to confirm.</p>
+          </div>
+        </div>
+      )}
+
+      {error && !value && (
+        <p className="mt-1 text-sm text-destructive">Please select a model</p>
+      )}
+    </div>
+  );
+}
 
 export function HuggingFaceProviderForm({
   connectedProvider,
@@ -34,71 +154,53 @@ export function HuggingFaceProviderForm({
   onModelChange,
   showModelError,
 }: HuggingFaceProviderFormProps) {
-  const [token, setToken] = useState('');
+  const [serverUrl, setServerUrl] = useState('http://localhost:8080');
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([]);
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customModelId, setCustomModelId] = useState('');
+  const [availableModels, setAvailableModels] = useState<HuggingFaceModel[]>([]);
 
-  const meta = PROVIDER_META.huggingface;
   const isConnected = connectedProvider?.connectionStatus === 'connected';
 
   const handleConnect = async () => {
-    if (!token.trim()) {
-      setError('Please enter a token');
-      return;
-    }
-
     setConnecting(true);
     setError(null);
 
     try {
       const accomplish = getAccomplish();
+      const result = await accomplish.testHuggingFaceConnection(serverUrl);
 
-      // Validate token
-      const validation = await accomplish.validateHuggingFaceToken(token.trim());
-      if (!validation.valid) {
-        setError(validation.error || 'Invalid token');
-        setConnecting(false);
-        return;
-      }
-
-      // Save token
-      await accomplish.addApiKey('huggingface', token.trim());
-
-      // Fetch models
-      const result = await accomplish.fetchHuggingFaceModels();
       if (!result.success) {
-        setError(result.error || 'Failed to fetch models');
+        setError(result.error || 'Connection failed');
         setConnecting(false);
         return;
       }
 
-      const models = result.models?.map(m => ({
-        id: `huggingface/${m.id}`,
-        name: m.name,
-      })) || [];
+      const models = (result.models || []) as HuggingFaceModel[];
       setAvailableModels(models);
 
-      // Store token prefix for display
-      const trimmedToken = token.trim();
+      // Check if any models support tools
+      const supportedModels = models.filter(m => m.toolSupport === 'supported');
+      if (supportedModels.length === 0 && models.length > 0) {
+        console.warn('[HuggingFace TGI] No models with tool support detected');
+      }
+
       const provider: ConnectedProvider = {
         providerId: 'huggingface',
         connectionStatus: 'connected',
         selectedModelId: null,
         credentials: {
           type: 'huggingface',
-          keyPrefix: trimmedToken.length > 20
-            ? trimmedToken.substring(0, 20) + '...'
-            : trimmedToken.substring(0, Math.min(trimmedToken.length, 10)) + '...',
+          serverUrl,
         } as HuggingFaceCredentials,
         lastConnectedAt: new Date().toISOString(),
-        availableModels: models,
+        availableModels: models.map(m => ({
+          id: `huggingface/${m.id}`,
+          name: m.name,
+          toolSupport: m.toolSupport,
+        })),
       };
 
       onConnect(provider);
-      setToken('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection failed');
     } finally {
@@ -106,40 +208,16 @@ export function HuggingFaceProviderForm({
     }
   };
 
-  const baseModels = connectedProvider?.availableModels || availableModels;
-  // Add "Other" option at the end
-  const models = [...baseModels, { id: OTHER_MODEL_ID, name: 'Other (enter model ID)' }];
-
-  // Check if current model is a custom one (not in the list)
-  const selectedModelId = connectedProvider?.selectedModelId;
-  const isCustomModel = selectedModelId && !baseModels.some(m => m.id === selectedModelId);
-
-  // Initialize custom input state based on whether current model is custom
-  useEffect(() => {
-    if (isCustomModel && selectedModelId) {
-      setShowCustomInput(true);
-      // Extract model ID without the 'huggingface/' prefix
-      const modelIdWithoutPrefix = selectedModelId.replace(/^huggingface\//, '');
-      setCustomModelId(modelIdWithoutPrefix);
-    }
-  }, [isCustomModel, selectedModelId]);
-
-  const handleModelSelect = (modelId: string) => {
-    if (modelId === OTHER_MODEL_ID) {
-      setShowCustomInput(true);
-      setCustomModelId('');
-    } else {
-      setShowCustomInput(false);
-      onModelChange(modelId);
-    }
-  };
-
-  const handleCustomModelSubmit = () => {
-    if (customModelId.trim()) {
-      const fullModelId = `huggingface/${customModelId.trim()}`;
-      onModelChange(fullModelId);
-    }
-  };
+  // Get models from connected provider or local state
+  const models: HuggingFaceModel[] = (connectedProvider?.availableModels || availableModels).map(m => {
+    // Handle both formats: with and without 'huggingface/' prefix
+    const id = m.id.replace(/^huggingface\//, '');
+    return {
+      id,
+      name: m.name,
+      toolSupport: (m as { toolSupport?: ToolSupportStatus }).toolSupport || 'unknown',
+    };
+  });
 
   return (
     <div className="rounded-xl border border-border bg-card p-5" data-testid="provider-settings-panel">
@@ -157,46 +235,23 @@ export function HuggingFaceProviderForm({
               transition={settingsTransitions.enter}
               className="space-y-3"
             >
-              {/* Token Section */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">Access Token</label>
-                {meta.helpUrl && (
-                  <a
-                    href={meta.helpUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-muted-foreground hover:text-primary underline"
-                  >
-                    How can I find it?
-                  </a>
-                )}
-              </div>
-
-              {/* Token input with trash */}
-              <div className="flex gap-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">TGI Server URL</label>
                 <input
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="hf_..."
-                  disabled={connecting}
-                  data-testid="api-key-input"
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-2.5 text-sm disabled:opacity-50"
+                  type="text"
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  placeholder="http://localhost:8080"
+                  data-testid="huggingface-server-url"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm"
                 />
-                <button
-                  onClick={() => setToken('')}
-                  className="rounded-md border border-border p-2.5 text-muted-foreground hover:text-foreground transition-colors"
-                  type="button"
-                  disabled={!token}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Start a TGI server locally and enter its URL above
+                </p>
               </div>
 
               <FormError error={error} />
-              <ConnectButton onClick={handleConnect} connecting={connecting} disabled={!token.trim()} />
+              <ConnectButton onClick={handleConnect} connecting={connecting} />
             </motion.div>
           ) : (
             <motion.div
@@ -208,69 +263,34 @@ export function HuggingFaceProviderForm({
               transition={settingsTransitions.enter}
               className="space-y-3"
             >
-              {/* Connected: Show masked token + Connected button + Model */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">Access Token</label>
-                {meta.helpUrl && (
-                  <a
-                    href={meta.helpUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-muted-foreground hover:text-primary underline"
-                  >
-                    How can I find it?
-                  </a>
-                )}
+              {/* Display saved server URL */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">TGI Server URL</label>
+                <input
+                  type="text"
+                  value={(connectedProvider?.credentials as HuggingFaceCredentials)?.serverUrl || 'http://localhost:8080'}
+                  disabled
+                  className="w-full rounded-md border border-input bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
+                />
               </div>
-
-              <input
-                type="text"
-                value={(() => {
-                  const creds = connectedProvider?.credentials as HuggingFaceCredentials | undefined;
-                  if (creds?.keyPrefix) return creds.keyPrefix;
-                  return 'Token saved (reconnect to see prefix)';
-                })()}
-                disabled
-                data-testid="api-key-display"
-                className="w-full rounded-md border border-input bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
-              />
 
               <ConnectedControls onDisconnect={onDisconnect} />
 
-              {/* Model Selector */}
-              <ModelSelector
+              {/* Model Selector with Tool Support */}
+              <HuggingFaceModelSelector
                 models={models}
-                value={showCustomInput ? OTHER_MODEL_ID : (connectedProvider?.selectedModelId || null)}
-                onChange={handleModelSelect}
-                error={showModelError && !connectedProvider?.selectedModelId && !showCustomInput}
+                value={connectedProvider?.selectedModelId || null}
+                onChange={onModelChange}
+                error={showModelError && !connectedProvider?.selectedModelId}
               />
 
-              {/* Custom Model Input */}
-              {showCustomInput && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Custom Model ID</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={customModelId}
-                      onChange={(e) => setCustomModelId(e.target.value)}
-                      placeholder="org/model-name (e.g., Qwen/Qwen3-32B)"
-                      className="flex-1 rounded-md border border-input bg-background px-3 py-2.5 text-sm"
-                    />
-                    <button
-                      onClick={handleCustomModelSubmit}
-                      disabled={!customModelId.trim()}
-                      className="rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                      type="button"
-                    >
-                      Use
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Enter the HuggingFace model ID from huggingface.co/models
-                  </p>
-                </div>
-              )}
+              {/* Tool support legend */}
+              <div className="flex items-center gap-3 pt-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <ToolSupportBadge status="supported" />
+                  <span>Function calling verified</span>
+                </span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
