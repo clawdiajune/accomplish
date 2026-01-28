@@ -49,11 +49,13 @@ try {
     ? ' --config.win.sign=false --config.win.signAndEditExecutable=false'
     : '';
 
+  const useWinZipTarget = isWindows && isCi;
   // Speed up NSIS packaging on CI by using zip compression.
-  const nsisZipFlag = isWindows && isCi ? ' --config.nsis.useZip=true' : '';
+  const nsisZipFlag = useWinZipTarget ? ' --config.nsis.useZip=true' : '';
+  const winTargetFlag = useWinZipTarget ? ' --config.win.target=zip' : '';
 
   // Use npx to run electron-builder to ensure it's found in node_modules
-  const command = `npx electron-builder ${args}${npmRebuildFlag}${skipSigningFlag}${nsisZipFlag}`;
+  const command = `npx electron-builder ${args}${npmRebuildFlag}${skipSigningFlag}${nsisZipFlag}${winTargetFlag}`;
   const builderEnv = {
     ...process.env,
     ...(isWindows && isCi ? { ELECTRON_BUILDER_LOG_LEVEL: 'debug' } : {}),
@@ -67,6 +69,9 @@ try {
     }
     if (nsisZipFlag) {
       console.log('(Using NSIS zip compression on CI)');
+    }
+    if (winTargetFlag) {
+      console.log('(Using Windows zip target on CI)');
     }
   }
   const startTime = Date.now();
