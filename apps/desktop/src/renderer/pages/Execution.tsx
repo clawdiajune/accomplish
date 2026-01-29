@@ -898,8 +898,8 @@ export default function ExecutionPage() {
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={springs.bouncy}
             >
-              <Card className="w-full max-w-lg p-6 mx-4">
-                <div className="flex items-start gap-4">
+              <Card className="w-full max-w-lg p-6 mx-4 max-h-[80vh] flex flex-col">
+                <div className="flex items-start gap-4 min-h-0 flex-1 overflow-hidden">
                   <div className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-full shrink-0",
                     isDeleteOperation(permissionRequest) ? "bg-red-500/10" :
@@ -916,7 +916,7 @@ export default function ExecutionPage() {
                       <AlertCircle className="h-5 w-5 text-warning" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-y-auto">
                     <h3 className={cn(
                       "text-lg font-semibold mb-2",
                       isDeleteOperation(permissionRequest) ? "text-red-600" : "text-foreground"
@@ -1489,7 +1489,7 @@ const MessageBubble = memo(function MessageBubble({ message, shouldStream = fals
       ) : (
       <div
         className={cn(
-          'max-w-[85%] rounded-2xl px-4 py-3 transition-all duration-150',
+          'max-w-[85%] rounded-2xl px-4 py-3 transition-all duration-150 relative',
           isUser
             ? 'bg-primary text-primary-foreground'
             : isTool
@@ -1565,35 +1565,35 @@ const MessageBubble = memo(function MessageBubble({ message, shouldStream = fals
             )}
           </>
         )}
+        {showCopyButton && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleCopy}
+                data-testid="message-copy-button"
+                className={cn(
+                  'absolute bottom-2 right-2',
+                  'opacity-0 group-hover:opacity-100 transition-all duration-200',
+                  'p-1 rounded',
+                  isUser ? 'hover:bg-primary-foreground/20' : 'hover:bg-accent',
+                  isUser
+                    ? (!copied ? 'text-primary-foreground/70 hover:text-primary-foreground' : '!bg-green-500/20 !text-green-300')
+                    : (!copied ? 'text-muted-foreground hover:text-foreground' : '!bg-green-500/10 !text-green-600')
+                )}
+                aria-label={'Copy to clipboard'}
+              >
+                <Check className={cn("absolute h-4 w-4", !copied && 'hidden')} />
+                <Copy className={cn("absolute h-4 w-4", copied && 'hidden')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span>Copy to clipboard</span>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
-      )}
-
-      {showCopyButton && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleCopy}
-              data-testid="message-copy-button"
-              className={cn(
-                'opacity-0 group-hover:opacity-100 transition-all duration-200 relative',
-                'p-1 rounded hover:bg-accent',
-                'shrink-0 mt-1',
-                isAssistant ? 'self-start' : 'self-end',
-                !copied && 'text-muted-foreground hover:text-foreground',
-                copied && '!bg-green-500/10 !text-green-600 !hover:bg-green-500/20'
-              )}
-              aria-label={'Copy to clipboard'}
-            >
-              <Check className={cn("absolute h-4 w-4", !copied && 'hidden')} />
-              <Copy className={cn("absolute h-4 w-4", copied && 'hidden')} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <span>Copy to clipboard</span>
-          </TooltipContent>
-        </Tooltip>
       )}
     </motion.div>
   );

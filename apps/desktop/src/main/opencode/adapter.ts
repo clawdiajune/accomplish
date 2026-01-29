@@ -615,7 +615,17 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       if (bundledNode) {
         // Prepend bundled Node.js bin directory to PATH
         const delimiter = process.platform === 'win32' ? ';' : ':';
-        env.PATH = `${bundledNode.binDir}${delimiter}${env.PATH || ''}`;
+        const pathSource = env.PATH ? 'PATH' : (env.Path ? 'Path' : 'none');
+        const existingPath = env.PATH ?? env.Path ?? '';
+        console.log(`[OpenCode CLI] Existing PATH source: ${pathSource} (${existingPath ? 'present' : 'missing'})`);
+        const combinedPath = existingPath
+          ? `${bundledNode.binDir}${delimiter}${existingPath}`
+          : bundledNode.binDir;
+        env.PATH = combinedPath;
+        // On Windows, PATH is often stored as "Path" (case-insensitive). Keep both in sync.
+        if (process.platform === 'win32') {
+          env.Path = combinedPath;
+        }
         // Also expose as NODE_BIN_PATH so agent can use it in bash commands
         env.NODE_BIN_PATH = bundledNode.binDir;
         console.log('[OpenCode CLI] Added bundled Node.js to PATH:', bundledNode.binDir);
