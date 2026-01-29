@@ -1,0 +1,253 @@
+// apps/desktop/src/main/skills/SkillsManager.ts
+
+import { app } from 'electron';
+import path from 'path';
+import fs from 'fs';
+import matter from 'gray-matter';
+import type { Skill, SkillSource, SkillFrontmatter } from '@accomplish/shared';
+import {
+  getAllSkills,
+  getEnabledSkills,
+  upsertSkill,
+  setSkillEnabled as repoSetEnabled,
+  deleteSkill as repoDeleteSkill,
+  getSkillById,
+} from '../store/repositories/skills';
+
+export class SkillsManager {
+  private initialized = false;
+
+  getBundledSkillsPath(): string {
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, 'skills');
+    }
+    return path.join(app.getAppPath(), 'skills');
+  }
+
+  getUserSkillsPath(): string {
+    return path.join(app.getPath('userData'), 'skills');
+  }
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    console.log('[SkillsManager] Initializing...');
+
+    const userSkillsPath = this.getUserSkillsPath();
+    if (!fs.existsSync(userSkillsPath)) {
+      fs.mkdirSync(userSkillsPath, { recursive: true });
+    }
+
+    await this.syncSkills();
+
+    this.initialized = true;
+    console.log('[SkillsManager] Initialized');
+  }
+
+  private async syncSkills(): Promise<void> {
+    const bundledPath = this.getBundledSkillsPath();
+    const userPath = this.getUserSkillsPath();
+
+    const existingSkills = new Map(getAllSkills().map(s => [s.id, s]));
+
+    const bundledSkills = this.scanDirectory(bundledPath, 'official');
+    const userSkills = this.scanDirectory(userPath, 'custom');
+
+    const allFoundSkills = [...bundledSkills, ...userSkills];
+
+    for (const skill of allFoundSkills) {
+      const existing = existingSkills.get(skill.id);
+      if (existing) {
+        skill.isEnabled = existing.isEnabled;
+      }
+      upsertSkill(skill);
+    }
+
+    console.log(`[SkillsManager] Synced ${allFoundSkills.length} skills`);
+  }
+
+  private scanDirectory(dirPath: string, defaultSource: SkillSource): Skill[] {
+    const skills: Skill[] = [];
+
+    if (!fs.existsSync(dirPath)) {
+      return skills;
+    }
+
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const skillMdPath = path.join(dirPath, entry.name, 'SKILL.md');
+      if (!fs.existsSync(skillMdPath)) continue;
+
+      try {
+        const content = fs.readFileSync(skillMdPath, 'utf-8');
+        const frontmatter = this.parseFrontmatter(content);
+
+        const name = frontmatter.name || entry.name;
+        const source = defaultSource;
+        const id = this.generateId(name, source);
+
+        skills.push({
+          id,
+          name,
+          command: frontmatter.command || `/${name}`,
+          description: frontmatter.description || '',
+          source,
+          isEnabled: true,
+          isVerified: frontmatter.verified || false,
+          filePath: skillMdPath,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error(`[SkillsManager] Failed to parse ${skillMdPath}:`, err);
+      }
+    }
+
+    return skills;
+  }
+
+  private parseFrontmatter(content: string): SkillFrontmatter {
+    try {
+      const { data } = matter(content);
+      return {
+        name: data.name || '',
+        description: data.description || '',
+        command: data.command,
+        verified: data.verified,
+      };
+    } catch {
+      return { name: '', description: '' };
+    }
+  }
+
+  private generateId(name: string, source: SkillSource): string {
+    const safeName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    return `${source}-${safeName}`;
+  }
+
+  async getAll(): Promise<Skill[]> {
+    return getAllSkills();
+  }
+
+  async getEnabled(): Promise<Skill[]> {
+    return getEnabledSkills();
+  }
+
+  async setEnabled(id: string, enabled: boolean): Promise<void> {
+    repoSetEnabled(id, enabled);
+  }
+
+  async getContent(id: string): Promise<string | null> {
+    const skill = getSkillById(id);
+    if (!skill) return null;
+
+    try {
+      return fs.readFileSync(skill.filePath, 'utf-8');
+    } catch {
+      return null;
+    }
+  }
+
+  async addFromFile(sourcePath: string): Promise<Skill> {
+    const content = fs.readFileSync(sourcePath, 'utf-8');
+    const frontmatter = this.parseFrontmatter(content);
+
+    if (!frontmatter.name) {
+      throw new Error('SKILL.md must have a name in frontmatter');
+    }
+
+    const skillDir = path.join(this.getUserSkillsPath(), frontmatter.name);
+    if (!fs.existsSync(skillDir)) {
+      fs.mkdirSync(skillDir, { recursive: true });
+    }
+
+    const destPath = path.join(skillDir, 'SKILL.md');
+    fs.copyFileSync(sourcePath, destPath);
+
+    const skill: Skill = {
+      id: this.generateId(frontmatter.name, 'custom'),
+      name: frontmatter.name,
+      command: frontmatter.command || `/${frontmatter.name}`,
+      description: frontmatter.description || '',
+      source: 'custom',
+      isEnabled: true,
+      isVerified: false,
+      filePath: destPath,
+      updatedAt: new Date().toISOString(),
+    };
+
+    upsertSkill(skill);
+    return skill;
+  }
+
+  async addFromGitHub(rawUrl: string): Promise<Skill> {
+    if (!rawUrl.includes('raw.githubusercontent.com') && !rawUrl.includes('github.com')) {
+      throw new Error('URL must be a GitHub raw file URL');
+    }
+
+    let fetchUrl = rawUrl;
+    if (rawUrl.includes('github.com') && !rawUrl.includes('raw.githubusercontent.com')) {
+      fetchUrl = rawUrl
+        .replace('github.com', 'raw.githubusercontent.com')
+        .replace('/blob/', '/');
+    }
+
+    const response = await fetch(fetchUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch: ${response.statusText}`);
+    }
+    const content = await response.text();
+
+    const frontmatter = this.parseFrontmatter(content);
+
+    if (!frontmatter.name) {
+      throw new Error('SKILL.md must have a name in frontmatter');
+    }
+
+    const skillDir = path.join(this.getUserSkillsPath(), frontmatter.name);
+    if (!fs.existsSync(skillDir)) {
+      fs.mkdirSync(skillDir, { recursive: true });
+    }
+
+    const destPath = path.join(skillDir, 'SKILL.md');
+    fs.writeFileSync(destPath, content);
+
+    const skill: Skill = {
+      id: this.generateId(frontmatter.name, 'community'),
+      name: frontmatter.name,
+      command: frontmatter.command || `/${frontmatter.name}`,
+      description: frontmatter.description || '',
+      source: 'community',
+      isEnabled: true,
+      isVerified: false,
+      filePath: destPath,
+      githubUrl: rawUrl,
+      updatedAt: new Date().toISOString(),
+    };
+
+    upsertSkill(skill);
+    return skill;
+  }
+
+  async delete(id: string): Promise<void> {
+    const skill = getSkillById(id);
+    if (!skill) {
+      throw new Error('Skill not found');
+    }
+
+    if (skill.source === 'official') {
+      throw new Error('Cannot delete official skills');
+    }
+
+    const skillDir = path.dirname(skill.filePath);
+    if (fs.existsSync(skillDir)) {
+      fs.rmSync(skillDir, { recursive: true });
+    }
+
+    repoDeleteSkill(id);
+  }
+}
+
+export const skillsManager = new SkillsManager();

@@ -11,6 +11,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'official',
     isEnabled: true,
     isVerified: true,
+    filePath: '/mock/skills/skill-creator/SKILL.md',
     updatedAt: '2026-01-23',
   },
   {
@@ -21,6 +22,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'official',
     isEnabled: true,
     isVerified: true,
+    filePath: '/mock/skills/code-review/SKILL.md',
     updatedAt: '2026-01-20',
   },
   {
@@ -31,6 +33,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'official',
     isEnabled: false,
     isVerified: true,
+    filePath: '/mock/skills/similarweb-analytics/SKILL.md',
     updatedAt: '2026-01-23',
   },
   {
@@ -41,6 +44,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'official',
     isEnabled: true,
     isVerified: false,
+    filePath: '/mock/skills/git-commit/SKILL.md',
     updatedAt: '2026-01-18',
   },
   {
@@ -51,6 +55,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'official',
     isEnabled: false,
     isVerified: false,
+    filePath: '/mock/skills/test-generator/SKILL.md',
     updatedAt: '2026-01-15',
   },
   {
@@ -61,6 +66,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'official',
     isEnabled: false,
     isVerified: false,
+    filePath: '/mock/skills/doc-generator/SKILL.md',
     updatedAt: '2026-01-14',
   },
   {
@@ -71,6 +77,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'community',
     isEnabled: false,
     isVerified: false,
+    filePath: '/mock/skills/api-designer/SKILL.md',
     updatedAt: '2026-01-12',
   },
   {
@@ -81,6 +88,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'community',
     isEnabled: false,
     isVerified: false,
+    filePath: '/mock/skills/sql-optimizer/SKILL.md',
     updatedAt: '2026-01-10',
   },
   {
@@ -91,6 +99,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'community',
     isEnabled: false,
     isVerified: false,
+    filePath: '/mock/skills/refactor-assist/SKILL.md',
     updatedAt: '2026-01-08',
   },
   {
@@ -101,6 +110,7 @@ export const MOCK_SKILLS: Skill[] = [
     source: 'community',
     isEnabled: false,
     isVerified: false,
+    filePath: '/mock/skills/debug-helper/SKILL.md',
     updatedAt: '2026-01-05',
   },
 ];
