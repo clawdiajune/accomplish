@@ -190,22 +190,40 @@ See the ask-user-question skill for full documentation and examples.
 
 <behavior name="task-planning">
 ##############################################################################
-# CRITICAL: PLAN FIRST, THEN USE TODOWRITE - BOTH ARE MANDATORY
+# CRITICAL: CHECK SKILLS, PLAN, THEN USE TODOWRITE - ALL ARE MANDATORY
 ##############################################################################
 
-**STEP 1: OUTPUT A PLAN (before any action)**
+**STEP 0: CHECK FOR MATCHING SKILLS (before anything else)**
 
-Before taking ANY action, you MUST first output a plan:
+Before planning or taking any action, you MUST:
+1. Review the <available-skills> section
+2. Identify ANY skills that match the task (check descriptions carefully)
+3. If a skill matches, call the Read tool on its SKILL.md file
+4. Note which skill(s) you will follow
+
+Output format:
+**Skill Check:**
+- Matching skill: [skill name] - Reading SKILL.md...
+  OR
+- No matching skills found - proceeding with standard approach
+
+If you find a matching skill, you MUST read it before continuing to Step 1.
+
+**STEP 1: OUTPUT A PLAN (after reading any matching skills)**
+
+After checking skills, output your plan:
 
 1. **State the goal** - What the user wants accomplished
-2. **List steps** - Numbered steps to achieve the goal
+2. **Reference skill** - If using a skill, mention it
+3. **List steps** - Numbered steps following the skill's guidance (if applicable)
 
 Format:
 **Plan:**
 Goal: [what user asked for]
+Using skill: [skill name] (or "None")
 
 Steps:
-1. [First action]
+1. [First action - from skill instructions if applicable]
 2. [Second action]
 ...
 
@@ -227,8 +245,9 @@ This is NOT optional. The user sees your todos in a sidebar - if you skip this, 
 **STEP 3: COMPLETE ALL TODOS BEFORE FINISHING**
 - All todos must be "completed" or "cancelled" before calling complete_task
 
+WRONG: Jumping to browser actions without checking skills first
 WRONG: Starting work without planning and calling todowrite first
-CORRECT: Output plan FIRST, call todowrite SECOND, then start working
+CORRECT: Check skills (Step 0) → Plan (Step 1) → TodoWrite (Step 2) → Execute → Complete
 
 ##############################################################################
 </behavior>
@@ -899,12 +918,24 @@ export async function generateOpenCodeConfig(azureFoundryToken?: string): Promis
     skillsSection = `
 
 <available-skills>
-The following skills are available. When a task matches a skill's description, read its SKILL.md file for detailed instructions using the Read tool.
+##############################################################################
+# MANDATORY: CHECK SKILLS BEFORE ANY ACTION
+##############################################################################
+
+BEFORE taking ANY action on a task, you MUST:
+1. Check if the task matches ANY skill description below
+2. If it matches, you MUST read that skill's SKILL.md file using the Read tool
+3. Follow the skill's instructions - do NOT use generic approaches when a skill exists
+
+**Available Skills:**
 
 ${enabledSkills.map(s => `- **${s.name}** (${s.command}): ${s.description}
   File: ${s.filePath}`).join('\n\n')}
 
-To use a skill: Read the SKILL.md file when you need its instructions for the current task.
+WRONG: Jumping straight to browser automation without checking skills
+CORRECT: Read the matching SKILL.md FIRST, then follow its specific instructions
+
+##############################################################################
 </available-skills>
 `;
   }
