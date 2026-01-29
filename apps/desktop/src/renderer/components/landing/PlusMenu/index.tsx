@@ -1,7 +1,8 @@
 // apps/desktop/src/renderer/components/landing/PlusMenu/index.tsx
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
+import type { Skill } from '@accomplish/shared';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
+import { SkillsSubmenu } from './SkillsSubmenu';
 
 interface PlusMenuProps {
   onSkillSelect: (command: string) => void;
@@ -19,6 +21,27 @@ interface PlusMenuProps {
 
 export function PlusMenu({ onSkillSelect, onOpenSettings, disabled }: PlusMenuProps) {
   const [open, setOpen] = useState(false);
+  const [skills, setSkills] = useState<Skill[]>([]);
+
+  // Fetch enabled skills on mount
+  useEffect(() => {
+    if (window.accomplish) {
+      window.accomplish
+        .getEnabledSkills()
+        .then(setSkills)
+        .catch((err) => console.error('Failed to load skills:', err));
+    }
+  }, []);
+
+  const handleSkillSelect = (command: string) => {
+    onSkillSelect(command);
+    setOpen(false);
+  };
+
+  const handleManageSkills = () => {
+    setOpen(false);
+    onOpenSettings('skills');
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -46,9 +69,11 @@ export function PlusMenu({ onSkillSelect, onOpenSettings, disabled }: PlusMenuPr
             Use Skills
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-[280px] p-0">
-            <div className="p-2 text-sm text-muted-foreground">
-              Skills submenu placeholder
-            </div>
+            <SkillsSubmenu
+              skills={skills}
+              onSkillSelect={handleSkillSelect}
+              onManageSkills={handleManageSkills}
+            />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       </DropdownMenuContent>
