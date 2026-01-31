@@ -178,6 +178,7 @@ export default function ExecutionPage() {
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [debugExported, setDebugExported] = useState(false);
+  const [debugSearchQuery, setDebugSearchQuery] = useState('');
   const debugPanelRef = useRef<HTMLDivElement>(null);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [customResponse, setCustomResponse] = useState('');
@@ -232,6 +233,19 @@ export default function ExecutionPage() {
       console.error('[Speech] Error:', error.message);
     },
   });
+
+  // Filter debug logs based on search query
+  const filteredDebugLogs = useMemo(() => {
+    if (!debugSearchQuery.trim()) return debugLogs;
+    const query = debugSearchQuery.toLowerCase();
+    return debugLogs.filter(log =>
+      log.message.toLowerCase().includes(query) ||
+      log.type.toLowerCase().includes(query) ||
+      (log.data !== undefined &&
+        (typeof log.data === 'string' ? log.data : JSON.stringify(log.data))
+          .toLowerCase().includes(query))
+    );
+  }, [debugLogs, debugSearchQuery]);
 
   // Debounced scroll function
   const scrollToBottom = useMemo(
@@ -293,8 +307,9 @@ export default function ExecutionPage() {
   useEffect(() => {
     if (id) {
       loadTaskById(id);
-      // Clear debug logs when switching tasks
+      // Clear debug logs and search when switching tasks
       setDebugLogs([]);
+      setDebugSearchQuery('');
     }
 
     // Handle individual task updates
@@ -1288,7 +1303,9 @@ export default function ExecutionPage() {
               <span className="font-medium">Debug Logs</span>
               {debugLogs.length > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full bg-zinc-700 text-zinc-300 text-xs">
-                  {debugLogs.length}
+                  {debugSearchQuery.trim() && filteredDebugLogs.length !== debugLogs.length
+                    ? `${filteredDebugLogs.length} of ${debugLogs.length}`
+                    : debugLogs.length}
                 </span>
               )}
             </div>
@@ -1347,13 +1364,31 @@ export default function ExecutionPage() {
                   ref={debugPanelRef}
                   className="h-[200px] overflow-y-auto bg-zinc-950 text-zinc-300 font-mono text-xs p-4"
                 >
+                  {/* Search input - top right */}
+                  <div className="flex justify-end mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-500" />
+                      <input
+                        type="text"
+                        value={debugSearchQuery}
+                        onChange={(e) => setDebugSearchQuery(e.target.value)}
+                        placeholder="Search logs..."
+                        className="h-7 w-48 pl-7 pr-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-300 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                        data-testid="debug-search-input"
+                      />
+                    </div>
+                  </div>
                   {debugLogs.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-zinc-500">
                       No debug logs yet. Run a task to see logs.
                     </div>
+                  ) : filteredDebugLogs.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-zinc-500">
+                      No logs match your search
+                    </div>
                   ) : (
                     <div className="space-y-1">
-                      {debugLogs.map((log, index) => (
+                      {filteredDebugLogs.map((log, index) => (
                         <div key={index} className="flex gap-2">
                           <span className="text-zinc-500 shrink-0">
                             {new Date(log.timestamp).toLocaleTimeString()}
