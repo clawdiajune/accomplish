@@ -1419,6 +1419,25 @@ export default function ExecutionPage() {
                         {debugSearchIndex + 1} of {filteredDebugLogs.length}
                       </span>
                     )}
+                    {/* Navigation arrows */}
+                    {debugSearchQuery.trim() && filteredDebugLogs.length > 0 && (
+                      <div className="flex">
+                        <button
+                          onClick={goToPrevMatch}
+                          className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 rounded-l border border-zinc-700 border-r-0"
+                          title="Previous match (Shift+Enter)"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={goToNextMatch}
+                          className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 rounded-r border border-zinc-700"
+                          title="Next match (Enter)"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <div className="relative">
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-500" />
                       <input
