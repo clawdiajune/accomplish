@@ -104,11 +104,12 @@ if (useBundledMcp) {
 
 // Install per-tool dependencies for dev/tsx workflows
 if (!useBundledMcp) {
-  // Use --omit=dev to exclude devDependencies (vitest, @types/*) - not needed at runtime
-  // This significantly reduces installer size and build time
+  // Install ALL dependencies (including devDependencies) during development
+  // because esbuild needs them for bundling. The bundle-skills.cjs script
+  // will reinstall with --omit=dev during packaged builds.
   const tools = ['dev-browser', 'dev-browser-mcp', 'file-permission', 'ask-user-question', 'complete-task', 'start-task'];
   for (const tool of tools) {
-    runCommand(`npm --prefix mcp-tools/${tool} install --omit=dev`, `Installing ${tool} dependencies`);
+    runCommand(`npm --prefix mcp-tools/${tool} install`, `Installing ${tool} dependencies`);
   }
 }
 
