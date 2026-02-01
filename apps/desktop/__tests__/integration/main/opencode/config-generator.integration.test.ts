@@ -136,15 +136,15 @@ describe('OpenCode Config Generator Integration', () => {
     }
   });
 
-  describe('getSkillsPath()', () => {
+  describe('getMcpToolsPath()', () => {
     describe('Development Mode', () => {
       it('should return skills path relative to app path in dev mode', async () => {
         // Arrange
         mockApp.isPackaged = false;
 
         // Act
-        const { getSkillsPath } = await import('@main/opencode/config-generator');
-        const result = getSkillsPath();
+        const { getMcpToolsPath } = await import('@main/opencode/config-generator');
+        const result = getMcpToolsPath();
 
         // Assert
         expect(result).toBe(path.join(tempAppDir, 'mcp-tools'));
@@ -160,8 +160,8 @@ describe('OpenCode Config Generator Integration', () => {
         (process as NodeJS.Process & { resourcesPath: string }).resourcesPath = resourcesPath;
 
         // Act
-        const { getSkillsPath } = await import('@main/opencode/config-generator');
-        const result = getSkillsPath();
+        const { getMcpToolsPath } = await import('@main/opencode/config-generator');
+        const result = getMcpToolsPath();
 
         // Assert
         expect(result).toBe(path.join(resourcesPath, 'mcp-tools'));

@@ -95,15 +95,15 @@ if (isWindows) {
   runCommand('npx electron-rebuild', 'Running electron-rebuild');
 }
 
-const useBundledSkills = process.env.OPENWORK_BUNDLED_SKILLS === '1' || process.env.CI === 'true';
+const useBundledMcp = process.env.OPENWORK_BUNDLED_MCP === '1' || process.env.CI === 'true';
 
 // Install shared MCP tools runtime dependencies (Playwright) at mcp-tools/ root
-if (useBundledSkills) {
+if (useBundledMcp) {
   runCommand('npm --prefix mcp-tools install --omit=dev', 'Installing shared MCP tools runtime dependencies');
 }
 
 // Install per-tool dependencies for dev/tsx workflows
-if (!useBundledSkills) {
+if (!useBundledMcp) {
   // Use --omit=dev to exclude devDependencies (vitest, @types/*) - not needed at runtime
   // This significantly reduces installer size and build time
   const tools = ['dev-browser', 'dev-browser-mcp', 'file-permission', 'ask-user-question', 'complete-task', 'start-task'];
