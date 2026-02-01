@@ -38,7 +38,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         'Call this tool FIRST before executing any task. Captures your plan. Other tools will fail until this is called.',
       inputSchema: {
         type: 'object',
-        required: ['original_request', 'goal', 'steps'],
+        required: ['original_request', 'goal', 'steps', 'verification'],
         properties: {
           original_request: {
             type: 'string',
@@ -53,6 +53,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             items: { type: 'string' },
             description: 'Planned actions to achieve the goal, in order',
           },
+          verification: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'How you will verify the task is complete',
+          },
         },
       },
     },
@@ -65,16 +70,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     throw new Error(`Unknown tool: ${request.params.name}`);
   }
 
-  const { original_request, goal, steps } = request.params.arguments as {
+  const { original_request, goal, steps, verification } = request.params.arguments as {
     original_request: string;
     goal: string;
     steps: string[];
+    verification: string[];
   };
 
   // Log for debugging
   console.error(`[start-task] original_request=${original_request}`);
   console.error(`[start-task] goal=${goal}`);
   console.error(`[start-task] steps=${JSON.stringify(steps)}`);
+  console.error(`[start-task] verification=${JSON.stringify(verification)}`);
 
   return {
     content: [{ type: 'text', text: 'Plan registered. Proceed with execution.' }],

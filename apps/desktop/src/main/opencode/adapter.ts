@@ -1346,7 +1346,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
    * This ensures users see the plan in the chat interface.
    */
   private emitPlanMessage(input: StartTaskInput, sessionId: string): void {
-    const planText = `**Plan:**\n**Goal:** ${input.goal}\n\n**Steps:**\n${input.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+    const verificationSection = input.verification?.length
+      ? `\n\n**Verification:**\n${input.verification.map((v, i) => `${i + 1}. ${v}`).join('\n')}`
+      : '';
+    const planText = `**Plan:**\n\n**Goal:** ${input.goal}\n\n**Steps:**\n${input.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${verificationSection}`;
 
     const syntheticMessage: OpenCodeMessage = {
       type: 'text',
@@ -1432,6 +1435,7 @@ interface StartTaskInput {
   original_request: string;
   goal: string;
   steps: string[];
+  verification: string[];
 }
 
 /**
