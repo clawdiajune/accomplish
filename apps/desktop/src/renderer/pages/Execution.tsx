@@ -350,6 +350,11 @@ export default function ExecutionPage() {
       // Clear debug logs and search when switching tasks
       setDebugLogs([]);
       setDebugSearchQuery('');
+
+      // Fetch todos for this task from database (always set, even if empty, to clear stale todos)
+      accomplish.getTodosForTask(id).then((todos) => {
+        useTaskStore.getState().setTodos(id, todos);
+      });
     }
 
     // Handle individual task updates
@@ -901,8 +906,8 @@ export default function ExecutionPage() {
                           ({currentTool})
                         </span>
                       )}
-                      {/* Elapsed time - only show during startup stages */}
-                      {!currentTool && startupStageTaskId === id && startupStage && (
+                      {/* Elapsed time - only show during startup stages when valid */}
+                      {!currentTool && startupStageTaskId === id && startupStage && elapsedTime > 0 && (
                         <span className="text-xs text-muted-foreground/60">
                           ({elapsedTime}s)
                         </span>
