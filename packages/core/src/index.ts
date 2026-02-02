@@ -20,5 +20,5 @@ export * from './skills/index.js';
 // Storage - Database, secure storage, and repositories
 export * from './storage/index.js';
 
-// Placeholder comments for future modules (to be implemented in subsequent tasks):
-// export * from './opencode/index.js';
+// OpenCode - CLI adapter, task manager, and stream parsing
+export * from './opencode/index.js';

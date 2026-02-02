@@ -192,12 +192,12 @@ importers:
       '@accomplish/shared':
         specifier: workspace:*
         version: link:../shared
+      '@azure/identity':
+        specifier: ^4.5.0
+        version: 4.13.0
       better-sqlite3:
         specifier: ^11.8.1
         version: 11.10.0
-      electron-store:
-        specifier: ^8.2.0
-        version: 8.2.0
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3

@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@accomplish/shared": "workspace:*",
+    "@azure/identity": "^4.5.0",
     "better-sqlite3": "^11.8.1",
     "gray-matter": "^4.0.3",
     "node-pty": "^1.0.0",
