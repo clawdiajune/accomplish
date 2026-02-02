@@ -22,9 +22,10 @@ import { CreateSkillModal } from '@/components/skills/CreateSkillModal';
 interface AddSkillDropdownProps {
   onSkillAdded?: () => void;
   onClose?: () => void; // Close the settings dialog
+  defaultOpen?: boolean; // Open dropdown on mount
 }
 
-export function AddSkillDropdown({ onSkillAdded, onClose }: AddSkillDropdownProps) {
+export function AddSkillDropdown({ onSkillAdded, onClose, defaultOpen }: AddSkillDropdownProps) {
   const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
   const [isUploadErrorDialogOpen, setIsUploadErrorDialogOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -100,7 +101,7 @@ export function AddSkillDropdown({ onSkillAdded, onClose }: AddSkillDropdownProp
   return (
     <>
       <CreateSkillModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} onSettingsClose={onClose} />
-      <DropdownMenu>
+      <DropdownMenu defaultOpen={defaultOpen}>
         <DropdownMenuTrigger asChild>
           <Button size="sm" className="gap-1.5">
             <svg
