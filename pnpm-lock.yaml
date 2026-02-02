@@ -20,6 +20,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@accomplish/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@accomplish/shared':
         specifier: workspace:*
         version: link:../../packages/shared
