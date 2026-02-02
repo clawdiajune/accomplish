@@ -308,15 +308,6 @@ export class OAuthBrowserFlow {
 // Singleton instance for app usage
 export const oauthBrowserFlow = new OAuthBrowserFlow();
 
-// Convenience function exports for backwards compatibility
 export async function loginOpenAiWithChatGpt(): Promise<LoginResult> {
   return oauthBrowserFlow.start();
-}
-
-export async function cancelOpenAiLogin(): Promise<void> {
-  return oauthBrowserFlow.cancel();
-}
-
-export function isOpenAiLoginInProgress(): boolean {
-  return oauthBrowserFlow.isInProgress();
 }

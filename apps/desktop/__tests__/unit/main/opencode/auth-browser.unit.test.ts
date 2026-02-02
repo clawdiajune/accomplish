@@ -431,16 +431,6 @@ describe('OAuthBrowserFlow', () => {
       expect(typeof module.loginOpenAiWithChatGpt).toBe('function');
     });
 
-    it('should export cancelOpenAiLogin function', async () => {
-      const module = await import('@main/opencode/auth-browser');
-      expect(typeof module.cancelOpenAiLogin).toBe('function');
-    });
-
-    it('should export isOpenAiLoginInProgress function', async () => {
-      const module = await import('@main/opencode/auth-browser');
-      expect(typeof module.isOpenAiLoginInProgress).toBe('function');
-    });
-
     it('should export oauthBrowserFlow singleton', async () => {
       const module = await import('@main/opencode/auth-browser');
       expect(module.oauthBrowserFlow).toBeInstanceOf(module.OAuthBrowserFlow);
