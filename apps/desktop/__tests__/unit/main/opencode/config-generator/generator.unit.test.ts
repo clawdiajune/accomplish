@@ -81,18 +81,7 @@ vi.mock('@main/store/providerSettings', () => ({
   getConnectedProviderIds: () => mockGetConnectedProviderIds(),
 }));
 
-// Mock app settings (legacy config)
-const mockGetOllamaConfig = vi.fn();
-const mockGetLMStudioConfig = vi.fn();
-const mockGetSelectedModel = vi.fn();
-const mockGetAzureFoundryConfig = vi.fn();
-
-vi.mock('@main/store/appSettings', () => ({
-  getOllamaConfig: () => mockGetOllamaConfig(),
-  getLMStudioConfig: () => mockGetLMStudioConfig(),
-  getSelectedModel: () => mockGetSelectedModel(),
-  getAzureFoundryConfig: () => mockGetAzureFoundryConfig(),
-}));
+// Note: Legacy app settings mocks removed - providerSettings is now the sole source of truth
 
 // Mock secure storage
 const mockGetApiKey = vi.fn();
@@ -242,10 +231,6 @@ describe('Generator Orchestrator Module', () => {
     mockGetConnectedProviderIds.mockReturnValue([]);
     mockGetApiKey.mockReturnValue(null);
     mockSkillsGetEnabled.mockResolvedValue([]);
-    mockGetOllamaConfig.mockReturnValue(null);
-    mockGetLMStudioConfig.mockReturnValue(null);
-    mockGetSelectedModel.mockReturnValue(null);
-    mockGetAzureFoundryConfig.mockReturnValue(null);
     mockEnsureAzureFoundryProxy.mockResolvedValue({ baseURL: 'http://localhost:3000' });
     mockEnsureMoonshotProxy.mockResolvedValue({ baseURL: 'http://localhost:3001' });
 
@@ -905,63 +890,7 @@ describe('Generator Orchestrator Module', () => {
       });
     });
 
-    describe('Legacy Provider Fallbacks', () => {
-      it('should fall back to legacy Ollama config when new settings not available', async () => {
-        // Arrange
-        mockGetProviderSettings.mockReturnValue(createMockProviderSettings({
-          connectedProviders: {},
-        }));
-        mockGetOllamaConfig.mockReturnValue({
-          enabled: true,
-          baseUrl: 'http://localhost:11434',
-          models: [{ id: 'llama3', displayName: 'Llama 3' }],
-        });
-
-        // Act
-        await generateOpenCodeConfig();
-
-        // Assert
-        const config = getWrittenConfig();
-        expect(config?.provider?.ollama).toBeDefined();
-        expect(config?.enabled_providers).toContain('ollama');
-      });
-
-      it('should fall back to legacy LM Studio config when new settings not available', async () => {
-        // Arrange
-        mockGetProviderSettings.mockReturnValue(createMockProviderSettings({
-          connectedProviders: {},
-        }));
-        mockGetLMStudioConfig.mockReturnValue({
-          enabled: true,
-          baseUrl: 'http://localhost:1234',
-          models: [{ id: 'local-model', name: 'Local Model', toolSupport: 'supported' }],
-        });
-
-        // Act
-        await generateOpenCodeConfig();
-
-        // Assert
-        const config = getWrittenConfig();
-        expect(config?.provider?.lmstudio).toBeDefined();
-      });
-
-      it('should fall back to legacy Bedrock config when new settings not available', async () => {
-        // Arrange
-        mockGetProviderSettings.mockReturnValue(createMockProviderSettings({
-          connectedProviders: {},
-        }));
-        mockGetApiKey.mockImplementation((key: string) =>
-          key === 'bedrock' ? JSON.stringify({ region: 'us-east-1', authType: 'default' }) : null
-        );
-
-        // Act
-        await generateOpenCodeConfig();
-
-        // Assert
-        const config = getWrittenConfig();
-        expect(config?.provider?.['amazon-bedrock']).toBeDefined();
-      });
-    });
+    // Note: Legacy Provider Fallback tests removed - providerSettings is now the sole source of truth
   });
 
   // ==========================================================================
@@ -1251,23 +1180,6 @@ describe('Generator Orchestrator Module', () => {
   // ==========================================================================
 
   describe('Error Handling', () => {
-    it('should handle failed Bedrock credentials JSON parse gracefully', async () => {
-      // Arrange - legacy path with invalid JSON
-      mockGetProviderSettings.mockReturnValue(createMockProviderSettings({
-        connectedProviders: {},
-      }));
-      mockGetApiKey.mockImplementation((key: string) =>
-        key === 'bedrock' ? 'invalid-json' : null
-      );
-
-      // Act - should not throw
-      await expect(generateOpenCodeConfig()).resolves.toBeDefined();
-
-      // Assert - config should still be valid
-      const config = getWrittenConfig();
-      expect(config?.$schema).toBeDefined();
-    });
-
     it('should handle missing provider credentials gracefully', async () => {
       // Arrange
       const ollamaCredentials: OllamaCredentials = { type: 'ollama', serverUrl: 'http://localhost:11434' };
