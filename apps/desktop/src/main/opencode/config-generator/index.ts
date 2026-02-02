@@ -49,3 +49,9 @@ export {
   ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE,
   getPlatformEnvironmentInstructions,
 } from './system-prompt';
+
+// Re-export auth utilities
+export { syncApiKeysToOpenCodeAuth, getOpenCodeAuthPath } from './auth/sync';
+
+// Re-export constants
+export { PROVIDER_ID_TO_OPENCODE, BASE_ENABLED_PROVIDERS } from './constants';
