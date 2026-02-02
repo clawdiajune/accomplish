@@ -67,7 +67,7 @@ export function SkillsSubmenu({ skills, onSkillSelect, onManageSkills, onCreateN
                   {skill.source === 'official' && (
                     <>
                       <img src={accomplishFavicon} alt="" className="h-2.5 w-2.5" />
-                      By Openwork
+                      By Accomplish
                     </>
                   )}
                   {skill.source === 'community' && (

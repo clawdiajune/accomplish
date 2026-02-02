@@ -90,7 +90,7 @@ export const SkillCard = memo(function SkillCard({
             {skill.source === 'official' && (
               <>
                 <img src={accomplishFavicon} alt="" className="h-2.5 w-2.5" />
-                By Openwork
+                By Accomplish
               </>
             )}
             {skill.source === 'community' && (
