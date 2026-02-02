@@ -11,20 +11,26 @@ import fs from 'fs';
 function getLegacyPaths(): string[] {
   const appDataPath = app.getPath('appData');
   return [
+    // Previous production path before rebrand
+    path.join(appDataPath, 'Accomplish'),
+    path.join(appDataPath, 'accomplish'),
     // Only migrate from DATA_SCHEMA_VERSION=2 path
     path.join(appDataPath, '@accomplish', 'desktop-v2'),
   ];
 }
 
+const LEGACY_DB_NAME = app.isPackaged ? 'accomplish.db' : 'accomplish-dev.db';
+const NEW_DB_NAME = app.isPackaged ? 'accomplish.db' : 'accomplish-dev.db';
+
 /**
  * Files to migrate from legacy path to new path.
  * Includes database files and secure storage.
  */
-const FILES_TO_MIGRATE = [
-  'openwork.db',
-  'openwork.db-wal',
-  'openwork.db-shm',
-  'secure-storage.json',
+const FILES_TO_MIGRATE: Array<{ src: string; dest: string }> = [
+  { src: LEGACY_DB_NAME, dest: NEW_DB_NAME },
+  { src: `${LEGACY_DB_NAME}-wal`, dest: `${NEW_DB_NAME}-wal` },
+  { src: `${LEGACY_DB_NAME}-shm`, dest: `${NEW_DB_NAME}-shm` },
+  { src: 'secure-storage.json', dest: 'secure-storage.json' },
 ];
 
 /**
@@ -43,10 +49,32 @@ export function migrateLegacyData(): boolean {
     const currentPath = app.getPath('userData');
 
     // If current path already has a database, skip migration
-    const currentDb = path.join(currentPath, 'openwork.db');
+    const currentDb = path.join(currentPath, NEW_DB_NAME);
     if (fs.existsSync(currentDb)) {
       console.log('[Migration] Current userData already has data, skipping migration');
       return false;
+    }
+
+    // If current path has legacy DB name, migrate in place
+    const currentLegacyDb = path.join(currentPath, LEGACY_DB_NAME);
+    if (fs.existsSync(currentLegacyDb)) {
+      console.log('[Migration] Found legacy database name in current userData path');
+      let migratedCount = 0;
+      for (const file of FILES_TO_MIGRATE) {
+        const src = path.join(currentPath, file.src);
+        const dest = path.join(currentPath, file.dest);
+        try {
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dest);
+            console.log(`[Migration] Copied: ${file.src} -> ${file.dest}`);
+            migratedCount++;
+          }
+        } catch (err) {
+          console.error(`[Migration] Failed to copy ${file.src}:`, err);
+        }
+      }
+      console.log(`[Migration] In-place migration complete. Copied ${migratedCount} files.`);
+      return migratedCount > 0;
     }
 
     // Look for legacy data in known paths
@@ -64,7 +92,7 @@ export function migrateLegacyData(): boolean {
           continue;
         }
 
-        const legacyDb = path.join(legacyPath, 'openwork.db');
+        const legacyDb = path.join(legacyPath, LEGACY_DB_NAME);
         if (!fs.existsSync(legacyDb)) {
           continue;
         }
@@ -85,17 +113,17 @@ export function migrateLegacyData(): boolean {
         // Copy files from legacy path to new path
         let migratedCount = 0;
         for (const file of FILES_TO_MIGRATE) {
-          const src = path.join(legacyPath, file);
-          const dest = path.join(currentPath, file);
+          const src = path.join(legacyPath, file.src);
+          const dest = path.join(currentPath, file.dest);
 
           try {
             if (fs.existsSync(src)) {
               fs.copyFileSync(src, dest);
-              console.log(`[Migration] Copied: ${file}`);
+              console.log(`[Migration] Copied: ${file.src} -> ${file.dest}`);
               migratedCount++;
             }
           } catch (err) {
-            console.error(`[Migration] Failed to copy ${file}:`, err);
+            console.error(`[Migration] Failed to copy ${file.src}:`, err);
             // Continue with other files even if one fails
           }
         }
