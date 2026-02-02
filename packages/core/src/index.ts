@@ -17,6 +17,8 @@ export * from './utils/index.js';
 // Skills - Skill discovery and management
 export * from './skills/index.js';
 
+// Storage - Database, secure storage, and repositories
+export * from './storage/index.js';
+
 // Placeholder comments for future modules (to be implemented in subsequent tasks):
 // export * from './opencode/index.js';
-// export * from './storage/index.js';
