@@ -21,7 +21,6 @@ import { getApiKey } from '../../store/secureStorage';
 import { getProviderSettings, getActiveProviderModel, getConnectedProviderIds } from '../../store/providerSettings';
 import { ensureAzureFoundryProxy } from '../azure-foundry-proxy';
 import { ensureMoonshotProxy } from '../moonshot-proxy';
-import { getNodePath } from '../../utils/bundled-node';
 import { skillsManager } from '../../skills';
 import type { ProviderId, ZaiCredentials, AzureFoundryCredentials } from '@accomplish/shared';
 
@@ -38,6 +37,7 @@ export type {
 
 // Import internal dependencies
 import { getMcpToolsPath, getOpenCodeConfigDir, resolveBundledTsxCommand, resolveMcpCommand } from './paths';
+import { PROVIDER_ID_TO_OPENCODE } from './constants';
 import { ACCOMPLISH_AGENT_NAME, ACCOMPLISH_SYSTEM_PROMPT_TEMPLATE, getPlatformEnvironmentInstructions } from './system-prompt';
 import type {
   OpenCodeConfig,
@@ -48,26 +48,6 @@ import type {
   ProviderModelConfig,
   ZaiProviderModelConfig,
 } from './types';
-
-/**
- * Provider ID to OpenCode CLI provider name mapping
- */
-const PROVIDER_ID_TO_OPENCODE: Record<ProviderId, string> = {
-  anthropic: 'anthropic',
-  openai: 'openai',
-  google: 'google',
-  xai: 'xai',
-  deepseek: 'deepseek',
-  moonshot: 'moonshot',
-  zai: 'zai-coding-plan',
-  bedrock: 'amazon-bedrock',
-  'azure-foundry': 'azure-foundry',
-  ollama: 'ollama',
-  openrouter: 'openrouter',
-  litellm: 'litellm',
-  minimax: 'minimax',
-  lmstudio: 'lmstudio',
-};
 
 /**
  * Base providers that are always enabled
