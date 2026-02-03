@@ -40,6 +40,47 @@ function wasLegacyImportAttempted(db: Database): boolean {
 }
 
 /**
+ * Check if the database has existing user data.
+ * Used to detect databases that already have user settings to avoid overwriting.
+ *
+ * Returns true if:
+ * - Onboarding is complete, OR
+ * - Any providers are configured, OR
+ * - Any tasks exist
+ */
+function hasExistingUserData(db: Database): boolean {
+  try {
+    // Check if onboarding is complete (user has set up the app)
+    const appSettings = db.prepare(
+      'SELECT onboarding_complete FROM app_settings WHERE id = 1'
+    ).get() as { onboarding_complete: number } | undefined;
+    if (appSettings?.onboarding_complete === 1) {
+      return true;
+    }
+
+    // Check if any providers are configured
+    const providerCount = db.prepare(
+      'SELECT COUNT(*) as count FROM providers'
+    ).get() as { count: number } | undefined;
+    if (providerCount && providerCount.count > 0) {
+      return true;
+    }
+
+    // Check if any tasks exist
+    const taskCount = db.prepare(
+      'SELECT COUNT(*) as count FROM tasks'
+    ).get() as { count: number } | undefined;
+    if (taskCount && taskCount.count > 0) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Mark legacy import as complete in schema_meta.
  */
 function markLegacyImportComplete(db: Database): void {
@@ -252,12 +293,27 @@ function importTaskHistory(db: Database): void {
  * This should be called after database initialization and migrations.
  * Import is tracked in schema_meta to ensure it only runs once per database.
  *
+ * IMPORTANT: On older versions, the legacy import was part of the v001 migration.
+ * If we detect an existing database without the import flag, it means the user
+ * upgraded from an older version where import was already done (or not needed).
+ * In that case, we mark import complete WITHOUT running it to avoid overwriting
+ * current settings with stale JSON data.
+ *
  * @param db The SQLite database instance
  */
 export function importLegacyElectronStoreData(db: Database): void {
   // Check if import was already attempted (tracked in schema_meta)
   if (wasLegacyImportAttempted(db)) {
     console.log('[LegacyImport] Legacy import already completed, skipping');
+    return;
+  }
+
+  // If the database already has user data but no import flag, it means the user
+  // upgraded from a version where import was baked into v001 migration.
+  // Mark as complete WITHOUT running to prevent overwriting current data.
+  if (hasExistingUserData(db)) {
+    console.log('[LegacyImport] Database has existing user data - marking import complete without running');
+    markLegacyImportComplete(db);
     return;
   }
 
