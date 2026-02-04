@@ -64,6 +64,20 @@ export type StartupStage =
   | 'connecting'
   | 'waiting';
 
+/**
+ * Array of all valid startup stage values.
+ * Order reflects the typical startup progression.
+ * Typed as readonly string[] for easy use with .includes() on string values.
+ */
+export const STARTUP_STAGES: readonly string[] = [
+  'starting',
+  'browser',
+  'environment',
+  'loading',
+  'connecting',
+  'waiting',
+] as const satisfies readonly StartupStage[];
+
 export interface TaskProgress {
   taskId: string;
   stage: 'init' | 'thinking' | 'tool-use' | 'waiting' | 'complete' | 'setup' | StartupStage;

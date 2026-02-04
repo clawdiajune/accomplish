@@ -30,6 +30,7 @@ import {
   toTaskMessage,
   queueMessage,
   flushAndCleanupBatcher,
+  validateTaskConfig,
 } from '@accomplish/core';
 import {
   storeApiKey,
@@ -58,6 +59,8 @@ import {
   setLiteLLMConfig,
   getLMStudioConfig,
   setLMStudioConfig,
+  testOllamaModelToolSupport,
+  testLMStudioModelToolSupport,
 } from '@accomplish/core';
 import { safeParseJson } from '@accomplish/core';
 import {
@@ -101,7 +104,7 @@ import type {
   LMStudioConfig,
   ToolSupportStatus,
 } from '@accomplish/shared';
-import { DEFAULT_PROVIDERS } from '@accomplish/shared';
+import { DEFAULT_PROVIDERS, ALLOWED_API_KEY_PROVIDERS, STANDARD_VALIDATION_PROVIDERS } from '@accomplish/shared';
 import {
   normalizeIpcError,
   permissionResponseSchema,
@@ -120,12 +123,7 @@ import {
 } from '../test-utils/mock-task-flow';
 import { skillsManager } from '../skills';
 
-const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'moonshot', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax', 'lmstudio', 'elevenlabs']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
-
-const STANDARD_VALIDATION_PROVIDERS = new Set([
-  'anthropic', 'openai', 'google', 'xai', 'deepseek', 'openrouter', 'moonshot', 'zai', 'minimax'
-]);
 
 interface OllamaModel {
   id: string;
@@ -145,38 +143,6 @@ function assertTrustedWindow(window: BrowserWindow | null): BrowserWindow {
   }
 
   return window;
-}
-
-function validateTaskConfig(config: TaskConfig): TaskConfig {
-  const prompt = sanitizeString(config.prompt, 'prompt');
-  const validated: TaskConfig = { prompt };
-
-  if (config.taskId) {
-    validated.taskId = sanitizeString(config.taskId, 'taskId', 128);
-  }
-  if (config.sessionId) {
-    validated.sessionId = sanitizeString(config.sessionId, 'sessionId', 128);
-  }
-  if (config.workingDirectory) {
-    validated.workingDirectory = sanitizeString(config.workingDirectory, 'workingDirectory', 1024);
-  }
-  if (Array.isArray(config.allowedTools)) {
-    validated.allowedTools = config.allowedTools
-      .filter((tool): tool is string => typeof tool === 'string')
-      .map((tool) => sanitizeString(tool, 'allowedTools', 64))
-      .slice(0, 20);
-  }
-  if (config.systemPromptAppend) {
-    validated.systemPromptAppend = sanitizeString(
-      config.systemPromptAppend,
-      'systemPromptAppend'
-    );
-  }
-  if (config.outputSchema && typeof config.outputSchema === 'object') {
-    validated.outputSchema = config.outputSchema;
-  }
-
-  return validated;
 }
 
 function isE2ESkipAuthEnabled(): boolean {
@@ -891,97 +857,6 @@ export function registerIPCHandlers(): void {
     setSelectedModel(model);
   });
 
-  async function testOllamaModelToolSupport(
-    baseUrl: string,
-    modelId: string
-  ): Promise<ToolSupportStatus> {
-    const testPayload = {
-      model: modelId,
-      messages: [
-        { role: 'user', content: 'What is the current time? You must use the get_current_time tool.' }
-      ],
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'get_current_time',
-            description: 'Gets the current time. Must be called to know what time it is.',
-            parameters: {
-              type: 'object',
-              properties: {
-                timezone: {
-                  type: 'string',
-                  description: 'Timezone (e.g., UTC, America/New_York)'
-                }
-              },
-              required: []
-            }
-          }
-        }
-      ],
-      tool_choice: 'required',
-      max_tokens: 100,
-    };
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testPayload),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (errorText.includes('tool') || errorText.includes('function') || errorText.includes('does not support')) {
-          console.log(`[Ollama] Model ${modelId} does not support tools (error response)`);
-          return 'unsupported';
-        }
-        console.warn(`[Ollama] Tool test failed for ${modelId}: ${response.status}`);
-        return 'unknown';
-      }
-
-      const data = await response.json() as {
-        choices?: Array<{
-          message?: {
-            tool_calls?: Array<{ function?: { name: string } }>;
-          };
-          finish_reason?: string;
-        }>;
-      };
-
-      const choice = data.choices?.[0];
-      if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
-        console.log(`[Ollama] Model ${modelId} supports tools (made tool call)`);
-        return 'supported';
-      }
-
-      if (choice?.finish_reason === 'tool_calls') {
-        console.log(`[Ollama] Model ${modelId} supports tools (finish_reason)`);
-        return 'supported';
-      }
-      return 'unknown';
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          console.warn(`[Ollama] Tool test timed out for ${modelId}`);
-          return 'unknown';
-        }
-        if (error.message.includes('tool') || error.message.includes('function')) {
-          console.log(`[Ollama] Model ${modelId} does not support tools (exception)`);
-          return 'unsupported';
-        }
-      }
-      console.warn(`[Ollama] Tool test error for ${modelId}:`, error);
-      return 'unknown';
-    }
-  }
-
   handle('ollama:test-connection', async (_event: IpcMainInvokeEvent, url: string) => {
     const sanitizedUrl = sanitizeString(url, 'ollamaUrl', 256);
 
@@ -1386,98 +1261,6 @@ export function registerIPCHandlers(): void {
     }
     setLiteLLMConfig(config);
   });
-
-  async function testLMStudioModelToolSupport(
-    baseUrl: string,
-    modelId: string
-  ): Promise<ToolSupportStatus> {
-    const testPayload = {
-      model: modelId,
-      messages: [
-        { role: 'user', content: 'What is the current time? You must use the get_current_time tool.' }
-      ],
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'get_current_time',
-            description: 'Gets the current time. Must be called to know what time it is.',
-            parameters: {
-              type: 'object',
-              properties: {
-                timezone: {
-                  type: 'string',
-                  description: 'Timezone (e.g., UTC, America/New_York)'
-                }
-              },
-              required: []
-            }
-          }
-        }
-      ],
-      tool_choice: 'required',
-      max_tokens: 100,
-    };
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testPayload),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (errorText.includes('tool') || errorText.includes('function')) {
-          console.log(`[LM Studio] Model ${modelId} does not support tools (error response)`);
-          return 'unsupported';
-        }
-        console.warn(`[LM Studio] Tool test failed for ${modelId}: ${response.status}`);
-        return 'unknown';
-      }
-
-      const data = await response.json() as {
-        choices?: Array<{
-          message?: {
-            tool_calls?: Array<{ function?: { name: string } }>;
-          };
-          finish_reason?: string;
-        }>;
-      };
-
-      const choice = data.choices?.[0];
-      if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
-        console.log(`[LM Studio] Model ${modelId} supports tools (made tool call)`);
-        return 'supported';
-      }
-
-      if (choice?.finish_reason === 'tool_calls') {
-        console.log(`[LM Studio] Model ${modelId} supports tools (finish_reason)`);
-        return 'supported';
-      }
-
-      return 'unknown';
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          console.warn(`[LM Studio] Tool test timed out for ${modelId}`);
-          return 'unknown';
-        }
-        if (error.message.includes('tool') || error.message.includes('function')) {
-          console.log(`[LM Studio] Model ${modelId} does not support tools (exception)`);
-          return 'unsupported';
-        }
-      }
-      console.warn(`[LM Studio] Tool test error for ${modelId}:`, error);
-      return 'unknown';
-    }
-  }
 
   handle('lmstudio:test-connection', async (_event: IpcMainInvokeEvent, url: string) => {
     const sanitizedUrl = sanitizeString(url, 'lmstudioUrl', 256);

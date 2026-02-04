@@ -16,10 +16,53 @@ export type ApiKeyProvider =
   | 'deepseek'
   | 'moonshot'
   | 'zai'
+  | 'azure-foundry'
   | 'custom'
   | 'bedrock'
   | 'litellm'
-  | 'minimax';
+  | 'minimax'
+  | 'lmstudio'
+  | 'elevenlabs';
+
+/**
+ * Providers that accept API key storage via the setApiKey IPC handler.
+ * This is the allowlist of providers that can have their API keys stored.
+ * Uses Set<string> to allow runtime checking of untrusted input strings.
+ */
+export const ALLOWED_API_KEY_PROVIDERS: ReadonlySet<string> = new Set<string>([
+  'anthropic',
+  'openai',
+  'openrouter',
+  'google',
+  'xai',
+  'deepseek',
+  'moonshot',
+  'zai',
+  'azure-foundry',
+  'custom',
+  'bedrock',
+  'litellm',
+  'minimax',
+  'lmstudio',
+  'elevenlabs',
+]);
+
+/**
+ * Providers that use standard OpenAI-compatible API key validation.
+ * These providers can be validated using a simple test request to their API.
+ * Uses Set<string> to allow runtime checking of untrusted input strings.
+ */
+export const STANDARD_VALIDATION_PROVIDERS: ReadonlySet<string> = new Set<string>([
+  'anthropic',
+  'openai',
+  'google',
+  'xai',
+  'deepseek',
+  'openrouter',
+  'moonshot',
+  'zai',
+  'minimax',
+]);
 
 export interface ProviderConfig {
   id: ProviderType;

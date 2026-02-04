@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   createMessageId,
+  STARTUP_STAGES,
   type Task,
   type TaskConfig,
   type TaskStatus,
@@ -521,8 +522,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   openLauncherWithPrompt: (prompt: string) => set({ isLauncherOpen: true, launcherInitialPrompt: prompt }),
   closeLauncher: () => set({ isLauncherOpen: false, launcherInitialPrompt: null }),
 }));
-
-const STARTUP_STAGES = ['starting', 'browser', 'environment', 'loading', 'connecting', 'waiting'];
 
 if (typeof window !== 'undefined' && window.accomplish) {
   window.accomplish.onTaskProgress((progress: unknown) => {

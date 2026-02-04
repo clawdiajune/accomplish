@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Skill, TodoItem } from '@accomplish/shared';
+import type { ProviderType, Skill, TodoItem } from '@accomplish/shared';
 
 // Expose the accomplish API to the renderer
 const accomplishAPI = {
@@ -45,7 +45,7 @@ const accomplishAPI = {
   // Settings
   getApiKeys: (): Promise<unknown[]> => ipcRenderer.invoke('settings:api-keys'),
   addApiKey: (
-    provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'moonshot' | 'zai' | 'azure-foundry' | 'custom' | 'bedrock' | 'litellm' | 'lmstudio' | 'elevenlabs',
+    provider: ProviderType,
     key: string,
     label?: string
   ): Promise<unknown> =>

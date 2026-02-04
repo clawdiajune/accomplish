@@ -5,6 +5,7 @@ import {
   ACCOMPLISH_AGENT_NAME,
   buildProviderConfigs,
   syncApiKeysToOpenCodeAuth as coreSyncApiKeysToOpenCodeAuth,
+  getOpenCodeAuthPath,
 } from '@accomplish/core';
 import { getApiKey, getAllApiKeys } from '../store/secureStorage';
 import { getNodePath } from '../utils/bundled-node';
@@ -92,17 +93,8 @@ export function getOpenCodeConfigPath(): string {
   return path.join(app.getPath('userData'), 'opencode', 'opencode.json');
 }
 
-/**
- * Returns the path to the OpenCode auth.json file.
- * Electron-specific: uses app.getPath('home').
- */
-export function getOpenCodeAuthPath(): string {
-  const homeDir = app.getPath('home');
-  if (process.platform === 'win32') {
-    return path.join(homeDir, 'AppData', 'Local', 'opencode', 'auth.json');
-  }
-  return path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
-}
+// Re-export getOpenCodeAuthPath from core for consumers that import from this module
+export { getOpenCodeAuthPath };
 
 /**
  * Syncs API keys to the OpenCode auth.json file.

@@ -10,3 +10,9 @@ export {
   DEFAULT_PROVIDERS,
   DEFAULT_MODEL,
 } from './models.js';
+export {
+  testModelToolSupport,
+  testOllamaModelToolSupport,
+  testLMStudioModelToolSupport,
+  type ToolSupportTestOptions,
+} from './tool-support-testing.js';
