@@ -11,6 +11,24 @@ export const ZAI_ENDPOINTS: Record<ZaiRegion, string> = {
 
 export type ProviderType = 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'ollama' | 'deepseek' | 'moonshot' | 'zai' | 'azure-foundry' | 'custom' | 'bedrock' | 'litellm' | 'minimax' | 'lmstudio';
 
+/**
+ * Providers that use API key authentication.
+ * Subset of ProviderType excluding local/server-based providers (ollama, lmstudio, azure-foundry).
+ */
+export type ApiKeyProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'openrouter'
+  | 'google'
+  | 'xai'
+  | 'deepseek'
+  | 'moonshot'
+  | 'zai'
+  | 'custom'
+  | 'bedrock'
+  | 'litellm'
+  | 'minimax';
+
 export interface ProviderConfig {
   id: ProviderType;
   name: string;

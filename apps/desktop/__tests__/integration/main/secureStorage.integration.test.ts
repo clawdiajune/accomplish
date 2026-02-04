@@ -1,6 +1,6 @@
 /**
  * Integration tests for secureStorage module
- * Tests real electron-store interactions with encrypted API key storage
+ * Tests @accomplish/core SecureStorage with encrypted API key storage
  * @module __tests__/integration/main/secureStorage.integration.test
  */
 

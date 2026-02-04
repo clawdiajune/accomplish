@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { ApiKeyProvider } from '@accomplish/shared';
 
 /**
  * Options for secure storage initialization
@@ -27,22 +28,8 @@ interface SecureStorageSchema {
   salt?: string;
 }
 
-/**
- * Supported API key providers
- */
-export type ApiKeyProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'openrouter'
-  | 'google'
-  | 'xai'
-  | 'deepseek'
-  | 'moonshot'
-  | 'zai'
-  | 'custom'
-  | 'bedrock'
-  | 'litellm'
-  | 'minimax';
+// Re-export ApiKeyProvider for consumers importing from this module
+export type { ApiKeyProvider };
 
 /**
  * Secure storage class using AES-256-GCM encryption.

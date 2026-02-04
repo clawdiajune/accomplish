@@ -54,8 +54,8 @@ if (process.env.CLEAN_START === '1') {
   } catch (err) {
     console.error('[Clean Mode] Failed to clear userData:', err);
   }
-  // Note: Secure storage (API keys, auth tokens) is stored in electron-store
-  // which lives in userData, so it gets cleared with the directory above
+  // Note: Secure storage (API keys) uses @accomplish/core's SecureStorage
+  // which stores data in userData, so it gets cleared with the directory above
 }
 
 // Set app name before anything else (affects internal Electron name)
