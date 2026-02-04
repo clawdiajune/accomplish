@@ -243,13 +243,21 @@ export async function buildProviderConfigs(
       bedrockOptions.profile = creds.profileName;
     }
 
-    // Note: Only pass options for Bedrock - no npm/name/models fields
-    // This matches the old behavior where OpenCode uses its built-in amazon-bedrock provider
+    // For Bedrock, we need to register the selected model in the models field
+    // so OpenCode can find it (otherwise it looks in built-in models which have region prefixes)
+    const bedrockModels: Record<string, ProviderModelConfig> = {};
+    if (activeModel?.provider === 'bedrock' && activeModel.model) {
+      // Extract model ID without provider prefix (e.g., "anthropic.claude-opus..." from "amazon-bedrock/anthropic.claude-opus...")
+      const modelId = activeModel.model.replace(/^amazon-bedrock\//, '');
+      bedrockModels[modelId] = { name: modelId, tools: true };
+    }
+
     providerConfigs.push({
       id: 'amazon-bedrock',
       options: bedrockOptions,
+      ...(Object.keys(bedrockModels).length > 0 ? { models: bedrockModels } : {}),
     });
-    console.log('[OpenCode Config Builder] Bedrock configured:', bedrockOptions);
+    console.log('[OpenCode Config Builder] Bedrock configured:', bedrockOptions, 'models:', Object.keys(bedrockModels));
   } else {
     const bedrockCredsJson = getApiKey('bedrock');
     if (bedrockCredsJson) {
@@ -262,12 +270,19 @@ export async function buildProviderConfigs(
           bedrockOptions.profile = creds.profileName;
         }
 
-        // Note: Only pass options for Bedrock - no npm/name/models fields
+        // For Bedrock, register the selected model so OpenCode can find it
+        const bedrockModels: Record<string, ProviderModelConfig> = {};
+        if (activeModel?.provider === 'bedrock' && activeModel.model) {
+          const modelId = activeModel.model.replace(/^amazon-bedrock\//, '');
+          bedrockModels[modelId] = { name: modelId, tools: true };
+        }
+
         providerConfigs.push({
           id: 'amazon-bedrock',
           options: bedrockOptions,
+          ...(Object.keys(bedrockModels).length > 0 ? { models: bedrockModels } : {}),
         });
-        console.log('[OpenCode Config Builder] Bedrock (legacy) configured:', bedrockOptions);
+        console.log('[OpenCode Config Builder] Bedrock (legacy) configured:', bedrockOptions, 'models:', Object.keys(bedrockModels));
       } catch (e) {
         console.warn('[OpenCode Config Builder] Failed to parse Bedrock credentials:', e);
       }
