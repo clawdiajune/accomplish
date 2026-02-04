@@ -226,6 +226,10 @@ vi.mock('@accomplish/core', async (importOriginal) => {
     debugMode: false,
   })),
   setActiveProvider: vi.fn(),
+  getActiveProviderModel: vi.fn(() => ({
+    provider: 'anthropic',
+    model: 'claude-3-5-sonnet-20241022',
+  })),
   getConnectedProvider: vi.fn(() => ({
     providerId: 'anthropic',
     connectionStatus: 'connected',
