@@ -1,39 +1,4 @@
-const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  'claude-opus-4-5': 'Claude Opus',
-  'claude-sonnet-4': 'Claude Sonnet',
-  'claude-haiku-3-5': 'Claude Haiku',
-  'gpt-4o': 'GPT-4o',
-  'gpt-4o-mini': 'GPT-4o Mini',
-  'gpt-4-turbo': 'GPT-4 Turbo',
-  'o1': 'o1',
-  'o1-mini': 'o1 Mini',
-  'o1-preview': 'o1 Preview',
-  'o3-mini': 'o3 Mini',
-  'gemini-2.0-flash': 'Gemini Flash',
-  'gemini-2.0-flash-thinking': 'Gemini Flash Thinking',
-  'gemini-1.5-pro': 'Gemini Pro',
-  'grok-2': 'Grok 2',
-  'grok-beta': 'Grok Beta',
-  'deepseek-chat': 'DeepSeek Chat',
-  'deepseek-reasoner': 'DeepSeek Reasoner',
-  'kimi-k2.5': 'Kimi K2.5',
-  'kimi-k2-turbo-preview': 'Kimi K2 Turbo (Preview)',
-  'kimi-latest': 'Kimi Latest',
-};
-
-const PROVIDER_PREFIXES = [
-  'anthropic/',
-  'openai/',
-  'google/',
-  'xai/',
-  'deepseek/',
-  'moonshot/',
-  'ollama/',
-  'openrouter/',
-  'litellm/',
-  'bedrock/',
-  'zai-coding-plan/',
-];
+import { MODEL_DISPLAY_NAMES, PROVIDER_PREFIXES } from '@accomplish/shared';
 
 export function getModelDisplayName(modelId: string): string {
   if (!modelId) {

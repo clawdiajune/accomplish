@@ -1,6 +1,8 @@
 import type { ProviderType } from '@accomplish/shared';
 import { ZAI_ENDPOINTS, type ZaiRegion } from '@accomplish/shared';
 
+import { fetchWithTimeout } from '../utils/fetch.js';
+
 export interface ValidationResult {
   valid: boolean;
   error?: string;
@@ -13,25 +15,6 @@ export interface ValidationOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 10000;
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 export async function validateApiKey(
   provider: ProviderType,

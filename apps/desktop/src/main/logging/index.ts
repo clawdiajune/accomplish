@@ -1,4 +1,4 @@
-export { redact } from './redact';
+export { redact } from '@accomplish/core';
 export {
   getLogFileWriter,
   initializeLogFileWriter,

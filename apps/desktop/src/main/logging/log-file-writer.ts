@@ -5,7 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import { redact } from './redact';
+import { redact } from '@accomplish/core';
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 const RETENTION_DAYS = 7;

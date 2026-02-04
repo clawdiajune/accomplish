@@ -7,23 +7,21 @@ import {
   getOpenCodeCliVersion,
   getTaskManager,
   disposeTaskManager,
-  type TaskCallbacks,
 } from '../opencode';
 import { getLogCollector } from '../logging';
-import { getAzureEntraToken } from '@accomplish/core';
 import {
+  getAzureEntraToken,
   getTasks,
   getTask,
   saveTask,
   updateTaskStatus,
-  updateTaskSessionId,
   updateTaskSummary,
   addTaskMessage,
   deleteTask,
   clearHistory,
-  saveTodosForTask,
   getTodosForTask,
-  clearTodosForTask,
+  validateApiKey,
+  fetchWithTimeout,
 } from '@accomplish/core';
 import { generateTaskSummary } from '../services/summarizer';
 import {
@@ -88,15 +86,12 @@ import type {
   PermissionResponse,
   OpenCodeMessage,
   TaskMessage,
-  TaskResult,
-  TaskStatus,
   SelectedModel,
   OllamaConfig,
   AzureFoundryConfig,
   LiteLLMConfig,
   LMStudioConfig,
   ToolSupportStatus,
-  TodoItem,
 } from '@accomplish/shared';
 import { DEFAULT_PROVIDERS } from '@accomplish/shared';
 import {
@@ -106,6 +101,7 @@ import {
   taskConfigSchema,
   validate,
 } from './validation';
+import { createTaskCallbacks } from './task-callbacks';
 import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 import { fromIni } from '@aws-sdk/credential-providers';
 import {
@@ -120,27 +116,16 @@ const MAX_TEXT_LENGTH = 8000;
 const ALLOWED_API_KEY_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'moonshot', 'zai', 'azure-foundry', 'custom', 'bedrock', 'litellm', 'minimax', 'lmstudio', 'elevenlabs']);
 const API_KEY_VALIDATION_TIMEOUT_MS = 15000;
 
+// Standard providers that can be validated using core's validateApiKey
+const STANDARD_VALIDATION_PROVIDERS = new Set([
+  'anthropic', 'openai', 'google', 'xai', 'deepseek', 'openrouter', 'moonshot', 'zai', 'minimax'
+]);
+
 interface OllamaModel {
   id: string;
   displayName: string;
   size: number;
   toolSupport?: ToolSupportStatus;
-}
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 const MESSAGE_BATCH_DELAY_MS = 50;
@@ -338,101 +323,14 @@ export function registerIPCHandlers(): void {
       return mockTask;
     }
 
-    const forwardToRenderer = (channel: string, data: unknown) => {
-      if (!window.isDestroyed() && !sender.isDestroyed()) {
-        sender.send(channel, data);
-      }
-    };
-
-    const callbacks: TaskCallbacks = {
-      onMessage: (message: OpenCodeMessage) => {
-        const taskMessage = toTaskMessage(message);
-        if (!taskMessage) return;
-
-        queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
-      },
-
-      onProgress: (progress: { stage: string; message?: string }) => {
-        forwardToRenderer('task:progress', {
-          taskId,
-          ...progress,
-        });
-      },
-
-      onPermissionRequest: (request: unknown) => {
-        flushAndCleanupBatcher(taskId);
-        forwardToRenderer('permission:request', request);
-      },
-
-      onComplete: (result: TaskResult) => {
-        flushAndCleanupBatcher(taskId);
-
-        forwardToRenderer('task:update', {
-          taskId,
-          type: 'complete',
-          result,
-        });
-
-        let taskStatus: TaskStatus;
-        if (result.status === 'success') {
-          taskStatus = 'completed';
-        } else if (result.status === 'interrupted') {
-          taskStatus = 'interrupted';
-        } else {
-          taskStatus = 'failed';
-        }
-
-        updateTaskStatus(taskId, taskStatus, new Date().toISOString());
-
-        const sessionId = result.sessionId || taskManager.getSessionId(taskId);
-        if (sessionId) {
-          updateTaskSessionId(taskId, sessionId);
-        }
-
-        if (result.status === 'success') {
-          clearTodosForTask(taskId);
-        }
-      },
-
-      onError: (error: Error) => {
-        flushAndCleanupBatcher(taskId);
-
-        forwardToRenderer('task:update', {
-          taskId,
-          type: 'error',
-          error: error.message,
-        });
-
-        updateTaskStatus(taskId, 'failed', new Date().toISOString());
-      },
-
-      onDebug: (log: { type: string; message: string; data?: unknown }) => {
-        if (getDebugMode()) {
-          forwardToRenderer('debug:log', {
-            taskId,
-            timestamp: new Date().toISOString(),
-            ...log,
-          });
-        }
-      },
-
-      onStatusChange: (status: TaskStatus) => {
-        forwardToRenderer('task:status-change', {
-          taskId,
-          status,
-        });
-        updateTaskStatus(taskId, status, new Date().toISOString());
-      },
-
-      onTodoUpdate: (todos: TodoItem[]) => {
-        saveTodosForTask(taskId, todos);
-        forwardToRenderer('todo:update', { taskId, todos });
-      },
-
-      onAuthError: (error: { providerId: string; message: string }) => {
-        forwardToRenderer('auth:error', error);
-      },
-    };
+    const callbacks = createTaskCallbacks({
+      taskId,
+      window,
+      sender,
+      toTaskMessage,
+      queueMessage,
+      flushAndCleanupBatcher,
+    });
 
     const task = await taskManager.startTask(taskId, validatedConfig, callbacks);
 
@@ -449,7 +347,9 @@ export function registerIPCHandlers(): void {
     generateTaskSummary(validatedConfig.prompt)
       .then((summary) => {
         updateTaskSummary(taskId, summary);
-        forwardToRenderer('task:summary', { taskId, summary });
+        if (!window.isDestroyed() && !sender.isDestroyed()) {
+          sender.send('task:summary', { taskId, summary });
+        }
       })
       .catch((err) => {
         console.warn('[IPC] Failed to generate task summary:', err);
@@ -566,97 +466,14 @@ export function registerIPCHandlers(): void {
       addTaskMessage(validatedExistingTaskId, userMessage);
     }
 
-    const forwardToRenderer = (channel: string, data: unknown) => {
-      if (!window.isDestroyed() && !sender.isDestroyed()) {
-        sender.send(channel, data);
-      }
-    };
-
-    const callbacks: TaskCallbacks = {
-      onMessage: (message: OpenCodeMessage) => {
-        const taskMessage = toTaskMessage(message);
-        if (!taskMessage) return;
-
-        queueMessage(taskId, taskMessage, forwardToRenderer, addTaskMessage);
-      },
-
-      onProgress: (progress: { stage: string; message?: string }) => {
-        forwardToRenderer('task:progress', {
-          taskId,
-          ...progress,
-        });
-      },
-
-      onPermissionRequest: (request: unknown) => {
-        flushAndCleanupBatcher(taskId);
-        forwardToRenderer('permission:request', request);
-      },
-
-      onComplete: (result: TaskResult) => {
-        flushAndCleanupBatcher(taskId);
-
-        forwardToRenderer('task:update', {
-          taskId,
-          type: 'complete',
-          result,
-        });
-
-        let taskStatus: TaskStatus;
-        if (result.status === 'success') {
-          taskStatus = 'completed';
-        } else if (result.status === 'interrupted') {
-          taskStatus = 'interrupted';
-        } else {
-          taskStatus = 'failed';
-        }
-
-        updateTaskStatus(taskId, taskStatus, new Date().toISOString());
-
-        const newSessionId = result.sessionId || taskManager.getSessionId(taskId);
-        if (newSessionId) {
-          updateTaskSessionId(taskId, newSessionId);
-        }
-
-        if (result.status === 'success') {
-          clearTodosForTask(taskId);
-        }
-      },
-
-      onError: (error: Error) => {
-        flushAndCleanupBatcher(taskId);
-
-        forwardToRenderer('task:update', {
-          taskId,
-          type: 'error',
-          error: error.message,
-        });
-
-        updateTaskStatus(taskId, 'failed', new Date().toISOString());
-      },
-
-      onDebug: (log: { type: string; message: string; data?: unknown }) => {
-        if (getDebugMode()) {
-          forwardToRenderer('debug:log', {
-            taskId,
-            timestamp: new Date().toISOString(),
-            ...log,
-          });
-        }
-      },
-
-      onStatusChange: (status: TaskStatus) => {
-        forwardToRenderer('task:status-change', {
-          taskId,
-          status,
-        });
-        updateTaskStatus(taskId, status, new Date().toISOString());
-      },
-
-      onTodoUpdate: (todos: TodoItem[]) => {
-        saveTodosForTask(taskId, todos);
-        forwardToRenderer('todo:update', { taskId, todos });
-      },
-    };
+    const callbacks = createTaskCallbacks({
+      taskId,
+      window,
+      sender,
+      toTaskMessage,
+      queueMessage,
+      flushAndCleanupBatcher,
+    });
 
     const task = await taskManager.startTask(taskId, {
       prompt: validatedPrompt,
@@ -769,44 +586,19 @@ export function registerIPCHandlers(): void {
 
   handle('api-key:validate', async (_event: IpcMainInvokeEvent, key: string) => {
     const sanitizedKey = sanitizeString(key, 'apiKey', 256);
+    console.log('[API Key] Validation requested for provider: anthropic');
 
-    try {
-      const response = await fetchWithTimeout(
-        'https://api.anthropic.com/v1/messages',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': sanitizedKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1,
-            messages: [{ role: 'user', content: 'test' }],
-          }),
-        },
-        API_KEY_VALIDATION_TIMEOUT_MS
-      );
+    const result = await validateApiKey('anthropic', sanitizedKey, {
+      timeout: API_KEY_VALIDATION_TIMEOUT_MS,
+    });
 
-      if (response.ok) {
-        console.log('[API Key] Validation succeeded');
-        return { valid: true };
-      }
-
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = (errorData as { error?: { message?: string } })?.error?.message || `API returned status ${response.status}`;
-
-      console.warn('[API Key] Validation failed', { status: response.status, error: errorMessage });
-
-      return { valid: false, error: errorMessage };
-    } catch (error) {
-      console.error('[API Key] Validation error', { error: error instanceof Error ? error.message : String(error) });
-      if (error instanceof Error && error.name === 'AbortError') {
-        return { valid: false, error: 'Request timed out. Please check your internet connection and try again.' };
-      }
-      return { valid: false, error: 'Failed to validate API key. Check your internet connection.' };
+    if (result.valid) {
+      console.log('[API Key] Validation succeeded');
+    } else {
+      console.warn('[API Key] Validation failed', { error: result.error });
     }
+
+    return result;
   });
 
   handle('api-key:validate-provider', async (_event: IpcMainInvokeEvent, provider: string, key: string, options?: Record<string, any>) => {
@@ -814,271 +606,139 @@ export function registerIPCHandlers(): void {
       return { valid: false, error: 'Unsupported provider' };
     }
 
-    let sanitizedKey = '';
-    const isUsingEntraIdAuth = provider === 'azure-foundry' && (
-      options?.authType === 'entra-id' || 
-      (!options && getAzureFoundryConfig()?.authType === 'entra-id')
-    );
+    console.log(`[API Key] Validation requested for provider: ${provider}`);
 
-    if (!isUsingEntraIdAuth) {
+    // For standard providers, delegate to core's validateApiKey
+    if (STANDARD_VALIDATION_PROVIDERS.has(provider)) {
+      let sanitizedKey: string;
       try {
         sanitizedKey = sanitizeString(key, 'apiKey', 256);
       } catch (e) {
         return { valid: false, error: e instanceof Error ? e.message : 'Invalid API key' };
       }
-    }
 
-    console.log(`[API Key] Validation requested for provider: ${provider}`);
+      const result = await validateApiKey(provider as import('@accomplish/shared').ProviderType, sanitizedKey, {
+        timeout: API_KEY_VALIDATION_TIMEOUT_MS,
+        baseUrl: provider === 'openai' ? getOpenAiBaseUrl().trim() || undefined : undefined,
+        zaiRegion: provider === 'zai' ? (options?.region as import('@accomplish/shared').ZaiRegion) || 'international' : undefined,
+      });
 
-    try {
-      let response: Response;
-
-      switch (provider) {
-        case 'anthropic':
-          response = await fetchWithTimeout(
-            'https://api.anthropic.com/v1/messages',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': sanitizedKey,
-                'anthropic-version': '2023-06-01',
-              },
-              body: JSON.stringify({
-                model: 'claude-3-haiku-20240307',
-                max_tokens: 1,
-                messages: [{ role: 'user', content: 'test' }],
-              }),
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-
-        case 'openai': {
-          const configuredBaseUrl = getOpenAiBaseUrl().trim();
-          const baseUrl = (configuredBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
-          response = await fetchWithTimeout(
-            `${baseUrl}/models`,
-            {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${sanitizedKey}`,
-              },
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-        }
-
-        case 'openrouter':
-          response = await fetchWithTimeout(
-            'https://openrouter.ai/api/v1/auth/key',
-            {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${sanitizedKey}`,
-              },
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-
-        case 'google':
-          response = await fetchWithTimeout(
-            `https://generativelanguage.googleapis.com/v1beta/models?key=${sanitizedKey}`,
-            {
-              method: 'GET',
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-
-        case 'xai':
-          response = await fetchWithTimeout(
-            'https://api.x.ai/v1/models',
-            {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${sanitizedKey}`,
-              },
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-
-        case 'deepseek':
-          response = await fetchWithTimeout(
-            'https://api.deepseek.com/models',
-            {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${sanitizedKey}`,
-              },
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-
-        case 'moonshot':
-          response = await fetchWithTimeout(
-            'https://api.moonshot.ai/v1/chat/completions',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sanitizedKey}`,
-              },
-              body: JSON.stringify({
-                model: 'kimi-latest',
-                max_tokens: 1,
-                messages: [{ role: 'user', content: 'test' }],
-              }),
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-
-        case 'zai': {
-          const zaiRegion = (options?.region as string) || 'international';
-          const zaiEndpoint = zaiRegion === 'china'
-            ? 'https://open.bigmodel.cn/api/paas/v4/models'
-            : 'https://api.z.ai/api/coding/paas/v4/models';
-
-          response = await fetchWithTimeout(
-            zaiEndpoint,
-            {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${sanitizedKey}`,
-              },
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-          break;
-        }
-
-        case 'azure-foundry':
-          const config = getAzureFoundryConfig();
-          const baseUrl = options?.baseUrl || config?.baseUrl;
-          const deploymentName = options?.deploymentName || config?.deploymentName;
-          const authType = options?.authType || config?.authType || 'api-key';
-
-          let entraToken = '';
-
-          if (authType === 'entra-id') {
-             if (options?.baseUrl && options?.deploymentName) {
-                 const tokenResult = await getAzureEntraToken();
-                 if (!tokenResult.success) {
-                     return { valid: false, error: tokenResult.error };
-                 }
-                 entraToken = tokenResult.token;
-             } else {
-                 return { valid: true };
-             }
-          }
-
-          if (!baseUrl || !deploymentName) {
-            console.log('[API Key] Skipping validation for azure-foundry provider (missing config or options)');
-            return { valid: true };
-          }
-
-          /* eslint-disable-next-line no-case-declarations */
-          const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
-          /* eslint-disable-next-line no-case-declarations */
-          const testUrl = `${cleanBaseUrl}/openai/deployments/${deploymentName}/chat/completions?api-version=2023-05-15`;
-
-          /* eslint-disable-next-line no-case-declarations */
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-          };
-
-          if (authType === 'entra-id') {
-             if (!entraToken) {
-               return { valid: false, error: 'Missing Entra ID access token for Azure Foundry validation request' };
-             }
-             headers['Authorization'] = `Bearer ${entraToken}`;
-          } else {
-             headers['api-key'] = sanitizedKey;
-          }
-
-          response = await fetchWithTimeout(
-            testUrl,
-            {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                messages: [{ role: 'user', content: 'test' }],
-                max_completion_tokens: 5
-              }),
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-
-          if (!response.ok) {
-            const firstErrorData = await response.json().catch(() => ({}));
-            const firstErrorMessage = (firstErrorData as { error?: { message?: string } })?.error?.message || '';
-
-            if (firstErrorMessage.includes('max_completion_tokens')) {
-              response = await fetchWithTimeout(
-                testUrl,
-                {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({
-                    messages: [{ role: 'user', content: 'test' }],
-                    max_tokens: 5
-                  }),
-                },
-                API_KEY_VALIDATION_TIMEOUT_MS
-              );
-            } else {
-              return { valid: false, error: firstErrorMessage || `API returned status ${response.status}` };
-            }
-          }
-          break;
-
-        case 'minimax':
-          response = await fetchWithTimeout(
-            'https://api.minimax.io/anthropic/v1/messages',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sanitizedKey}`,
-                'anthropic-version': '2023-06-01',
-              },
-              body: JSON.stringify({
-                model: 'MiniMax-M2',
-                max_tokens: 1,
-                messages: [{ role: 'user', content: 'test' }],
-              }),
-            },
-            API_KEY_VALIDATION_TIMEOUT_MS
-          );
-
-          break;
-
-        default:
-          return { valid: true };
+      if (result.valid) {
+        console.log(`[API Key] Validation succeeded for ${provider}`);
+      } else {
+        console.warn(`[API Key] Validation failed for ${provider}`, { error: result.error });
       }
 
-      if (response.ok) {
-        console.log(`[API Key] Validation succeeded for ${provider}`);
+      return result;
+    }
+
+    // Handle azure-foundry with special Entra ID handling
+    if (provider === 'azure-foundry') {
+      const config = getAzureFoundryConfig();
+      const baseUrl = options?.baseUrl || config?.baseUrl;
+      const deploymentName = options?.deploymentName || config?.deploymentName;
+      const authType = options?.authType || config?.authType || 'api-key';
+
+      let entraToken = '';
+      let sanitizedKey = '';
+
+      if (authType === 'entra-id') {
+        if (options?.baseUrl && options?.deploymentName) {
+          const tokenResult = await getAzureEntraToken();
+          if (!tokenResult.success) {
+            return { valid: false, error: tokenResult.error };
+          }
+          entraToken = tokenResult.token;
+        } else {
+          return { valid: true };
+        }
+      } else {
+        try {
+          sanitizedKey = sanitizeString(key, 'apiKey', 256);
+        } catch (e) {
+          return { valid: false, error: e instanceof Error ? e.message : 'Invalid API key' };
+        }
+      }
+
+      if (!baseUrl || !deploymentName) {
+        console.log('[API Key] Skipping validation for azure-foundry provider (missing config or options)');
         return { valid: true };
       }
 
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = (errorData as { error?: { message?: string } })?.error?.message || `API returned status ${response.status}`;
+      const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+      const testUrl = `${cleanBaseUrl}/openai/deployments/${deploymentName}/chat/completions?api-version=2023-05-15`;
 
-      console.warn(`[API Key] Validation failed for ${provider}`, { status: response.status, error: errorMessage });
-      return { valid: false, error: errorMessage };
-    } catch (error) {
-      console.error(`[API Key] Validation error for ${provider}`, { error: error instanceof Error ? error.message : String(error) });
-      if (error instanceof Error && error.name === 'AbortError') {
-        return { valid: false, error: 'Request timed out. Please check your internet connection and try again.' };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (authType === 'entra-id') {
+        if (!entraToken) {
+          return { valid: false, error: 'Missing Entra ID access token for Azure Foundry validation request' };
+        }
+        headers['Authorization'] = `Bearer ${entraToken}`;
+      } else {
+        headers['api-key'] = sanitizedKey;
       }
-      return { valid: false, error: 'Failed to validate API key. Check your internet connection.' };
+
+      try {
+        let response = await fetchWithTimeout(
+          testUrl,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              messages: [{ role: 'user', content: 'test' }],
+              max_completion_tokens: 5
+            }),
+          },
+          API_KEY_VALIDATION_TIMEOUT_MS
+        );
+
+        if (!response.ok) {
+          const firstErrorData = await response.json().catch(() => ({}));
+          const firstErrorMessage = (firstErrorData as { error?: { message?: string } })?.error?.message || '';
+
+          if (firstErrorMessage.includes('max_completion_tokens')) {
+            response = await fetchWithTimeout(
+              testUrl,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  messages: [{ role: 'user', content: 'test' }],
+                  max_tokens: 5
+                }),
+              },
+              API_KEY_VALIDATION_TIMEOUT_MS
+            );
+          } else {
+            return { valid: false, error: firstErrorMessage || `API returned status ${response.status}` };
+          }
+        }
+
+        if (response.ok) {
+          console.log(`[API Key] Validation succeeded for ${provider}`);
+          return { valid: true };
+        }
+
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = (errorData as { error?: { message?: string } })?.error?.message || `API returned status ${response.status}`;
+        console.warn(`[API Key] Validation failed for ${provider}`, { error: errorMessage });
+        return { valid: false, error: errorMessage };
+      } catch (error) {
+        console.error(`[API Key] Validation error for ${provider}`, { error: error instanceof Error ? error.message : String(error) });
+        if (error instanceof Error && error.name === 'AbortError') {
+          return { valid: false, error: 'Request timed out. Please check your internet connection and try again.' };
+        }
+        return { valid: false, error: 'Failed to validate API key. Check your internet connection.' };
+      }
     }
+
+    // For local servers and other providers that don't need validation
+    // (ollama, lmstudio, litellm, bedrock, elevenlabs, custom)
+    console.log(`[API Key] Skipping validation for ${provider} (local/custom provider)`);
+    return { valid: true };
   });
 
   handle('bedrock:validate', async (_event: IpcMainInvokeEvent, credentials: string) => {

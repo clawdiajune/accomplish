@@ -1,9 +1,8 @@
-/**
- * Redact sensitive data from log strings
- * Handles API keys, tokens, and other secrets
- */
+// packages/core/src/utils/redact.ts
 
-// Patterns for sensitive data
+/**
+ * Patterns for detecting sensitive data in strings.
+ */
 const REDACTION_PATTERNS = [
   // API keys - various formats
   /sk-[a-zA-Z0-9]{20,}/g,  // OpenAI/Anthropic style
@@ -21,12 +20,18 @@ const REDACTION_PATTERNS = [
   /(?:secret|password|key)['":\s]*[=:]\s*['"]?([A-Za-z0-9+/=]{32,})['"]?/gi,
 ];
 
+/**
+ * Redact sensitive data from a string.
+ * Keeps first 4 characters for identification, replaces rest with [REDACTED].
+ *
+ * @param text - The text to redact
+ * @returns Text with sensitive data redacted
+ */
 export function redact(text: string): string {
   let result = text;
 
   for (const pattern of REDACTION_PATTERNS) {
     result = result.replace(pattern, (match) => {
-      // Keep first 4 chars for identification, redact rest
       const prefix = match.slice(0, 4);
       return `${prefix}[REDACTED]`;
     });
