@@ -285,13 +285,13 @@ export class PermissionRequestHandler {
    * Rejects all pending promises with a cancellation error
    */
   clearAll(): void {
-    for (const [requestId, pending] of this.pendingPermissions) {
+    for (const [, pending] of this.pendingPermissions) {
       clearTimeout(pending.timeoutId);
       pending.reject(new Error('Request cancelled'));
     }
     this.pendingPermissions.clear();
 
-    for (const [requestId, pending] of this.pendingQuestions) {
+    for (const [, pending] of this.pendingQuestions) {
       clearTimeout(pending.timeoutId);
       pending.reject(new Error('Request cancelled'));
     }
