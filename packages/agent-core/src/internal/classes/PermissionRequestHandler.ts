@@ -1,11 +1,3 @@
-/**
- * Permission Request Handler
- *
- * Reusable logic for handling permission and question requests.
- * This module manages request state, timeouts, and validation.
- * The Electron-specific parts (IPC, HTTP servers) remain in the desktop app.
- */
-
 import {
   FILE_OPERATIONS,
   PERMISSION_REQUEST_TIMEOUT_MS,
@@ -14,26 +6,17 @@ import {
 } from '../../common/index.js';
 import type { FileOperation, PermissionRequest, PermissionOption } from '../../common/types/permission.js';
 
-/**
- * Generic pending request interface
- */
 export interface PendingRequest<T> {
   resolve: (result: T) => void;
   reject: (error: Error) => void;
   timeoutId: NodeJS.Timeout;
 }
 
-/**
- * Validation result for permission request data
- */
 export interface PermissionValidationResult {
   valid: boolean;
   error?: string;
 }
 
-/**
- * Raw file permission request data (from HTTP request body)
- */
 export interface FilePermissionRequestData {
   operation?: string;
   filePath?: string;
@@ -42,9 +25,6 @@ export interface FilePermissionRequestData {
   contentPreview?: string;
 }
 
-/**
- * Raw question request data (from HTTP request body)
- */
 export interface QuestionRequestData {
   question?: string;
   header?: string;
@@ -52,19 +32,12 @@ export interface QuestionRequestData {
   multiSelect?: boolean;
 }
 
-/**
- * Question response data
- */
 export interface QuestionResponseData {
   selectedOptions?: string[];
   customText?: string;
   denied?: boolean;
 }
 
-/**
- * Handles permission and question request lifecycle.
- * Manages pending requests, timeouts, and validation.
- */
 export class PermissionRequestHandler {
   private pendingPermissions = new Map<string, PendingRequest<boolean>>();
   private pendingQuestions = new Map<string, PendingRequest<QuestionResponseData>>();
@@ -74,11 +47,6 @@ export class PermissionRequestHandler {
     this.defaultTimeoutMs = timeoutMs;
   }
 
-  /**
-   * Create a new permission request and wait for response
-   * @param timeoutMs - Optional timeout override
-   * @returns Promise that resolves when user responds
-   */
   createPermissionRequest(timeoutMs?: number): { requestId: string; promise: Promise<boolean> } {
     const requestId = createFilePermissionRequestId();
     const timeout = timeoutMs ?? this.defaultTimeoutMs;
@@ -95,11 +63,6 @@ export class PermissionRequestHandler {
     return { requestId, promise };
   }
 
-  /**
-   * Create a new question request and wait for response
-   * @param timeoutMs - Optional timeout override
-   * @returns Promise that resolves when user responds
-   */
   createQuestionRequest(timeoutMs?: number): { requestId: string; promise: Promise<QuestionResponseData> } {
     const requestId = createQuestionRequestId();
     const timeout = timeoutMs ?? this.defaultTimeoutMs;
@@ -116,12 +79,6 @@ export class PermissionRequestHandler {
     return { requestId, promise };
   }
 
-  /**
-   * Resolve a pending permission request
-   * @param requestId - The request ID to resolve
-   * @param allowed - Whether permission was granted
-   * @returns true if request was found and resolved, false otherwise
-   */
   resolvePermissionRequest(requestId: string, allowed: boolean): boolean {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
@@ -134,12 +91,6 @@ export class PermissionRequestHandler {
     return true;
   }
 
-  /**
-   * Resolve a pending question request
-   * @param requestId - The request ID to resolve
-   * @param response - The user's response
-   * @returns true if request was found and resolved, false otherwise
-   */
   resolveQuestionRequest(requestId: string, response: QuestionResponseData): boolean {
     const pending = this.pendingQuestions.get(requestId);
     if (!pending) {
@@ -152,11 +103,6 @@ export class PermissionRequestHandler {
     return true;
   }
 
-  /**
-   * Validate file permission request data
-   * @param data - Raw request data to validate
-   * @returns Validation result with error message if invalid
-   */
   validateFilePermissionRequest(data: unknown): PermissionValidationResult {
     if (!data || typeof data !== 'object') {
       return { valid: false, error: 'Invalid request data' };
@@ -164,7 +110,6 @@ export class PermissionRequestHandler {
 
     const requestData = data as FilePermissionRequestData;
 
-    // Check required fields
     if (!requestData.operation) {
       return { valid: false, error: 'operation is required' };
     }
@@ -173,7 +118,6 @@ export class PermissionRequestHandler {
       return { valid: false, error: 'operation and either filePath or filePaths are required' };
     }
 
-    // Validate operation type
     if (!FILE_OPERATIONS.includes(requestData.operation as FileOperation)) {
       return {
         valid: false,
@@ -184,11 +128,6 @@ export class PermissionRequestHandler {
     return { valid: true };
   }
 
-  /**
-   * Validate question request data
-   * @param data - Raw request data to validate
-   * @returns Validation result with error message if invalid
-   */
   validateQuestionRequest(data: unknown): PermissionValidationResult {
     if (!data || typeof data !== 'object') {
       return { valid: false, error: 'Invalid request data' };
@@ -203,13 +142,6 @@ export class PermissionRequestHandler {
     return { valid: true };
   }
 
-  /**
-   * Build a PermissionRequest object for file operations
-   * @param requestId - The request ID
-   * @param taskId - The associated task ID
-   * @param data - The validated request data
-   * @returns PermissionRequest object ready to send to the UI
-   */
   buildFilePermissionRequest(
     requestId: string,
     taskId: string,
@@ -228,13 +160,6 @@ export class PermissionRequestHandler {
     };
   }
 
-  /**
-   * Build a PermissionRequest object for questions
-   * @param requestId - The request ID
-   * @param taskId - The associated task ID
-   * @param data - The validated request data
-   * @returns PermissionRequest object ready to send to the UI
-   */
   buildQuestionRequest(
     requestId: string,
     taskId: string,
@@ -252,46 +177,30 @@ export class PermissionRequestHandler {
     };
   }
 
-  /**
-   * Check if there are any pending permission requests
-   */
   hasPendingPermissions(): boolean {
     return this.pendingPermissions.size > 0;
   }
 
-  /**
-   * Check if there are any pending question requests
-   */
   hasPendingQuestions(): boolean {
     return this.pendingQuestions.size > 0;
   }
 
-  /**
-   * Get the count of pending permission requests
-   */
   getPendingPermissionCount(): number {
     return this.pendingPermissions.size;
   }
 
-  /**
-   * Get the count of pending question requests
-   */
   getPendingQuestionCount(): number {
     return this.pendingQuestions.size;
   }
 
-  /**
-   * Clear all pending requests (e.g., on shutdown)
-   * Rejects all pending promises with a cancellation error
-   */
   clearAll(): void {
-    for (const [requestId, pending] of this.pendingPermissions) {
+    for (const [, pending] of this.pendingPermissions) {
       clearTimeout(pending.timeoutId);
       pending.reject(new Error('Request cancelled'));
     }
     this.pendingPermissions.clear();
 
-    for (const [requestId, pending] of this.pendingQuestions) {
+    for (const [, pending] of this.pendingQuestions) {
       clearTimeout(pending.timeoutId);
       pending.reject(new Error('Request cancelled'));
     }

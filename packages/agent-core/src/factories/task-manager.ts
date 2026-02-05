@@ -1,8 +1,3 @@
-/**
- * Factory for creating TaskManager instances
- * This factory adapts the public API interface to the internal TaskManager class.
- */
-
 import { TaskManager } from '../internal/classes/TaskManager.js';
 import type {
   TaskManagerOptions,
@@ -13,17 +8,9 @@ import type {
 } from '../types/task-manager.js';
 import type { TaskConfig, Task } from '../common/types/task.js';
 
-/**
- * Creates a TaskManager instance that implements the TaskManagerAPI interface.
- *
- * @param options - Configuration options for the TaskManager
- * @returns A TaskManagerAPI instance
- */
 export function createTaskManager(options: TaskManagerOptions): TaskManagerAPI {
-  // The public TaskManagerOptions now matches the internal structure directly
   const taskManager = new TaskManager(options);
 
-  // Return an object that implements TaskManagerAPI by delegating to the TaskManager instance
   return {
     startTask(
       taskId: string,
@@ -103,5 +90,4 @@ export function createTaskManager(options: TaskManagerOptions): TaskManagerAPI {
   };
 }
 
-// Re-export types for convenience
 export type { TaskManagerOptions, TaskManagerAPI, TaskCallbacks, TaskProgressEvent, TaskAdapterOptions };

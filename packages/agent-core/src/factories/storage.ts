@@ -1,16 +1,9 @@
-/**
- * Factory for creating Storage instances
- * This factory composes all storage repositories and secure storage into a unified StorageAPI.
- */
-
 import {
   initializeDatabase,
   closeDatabase,
   isDatabaseInitialized,
   getDatabasePath,
 } from '../storage/database.js';
-
-// Task History repository functions
 import {
   getTasks,
   getTask,
@@ -25,8 +18,6 @@ import {
   saveTodosForTask,
   clearTodosForTask,
 } from '../storage/repositories/taskHistory.js';
-
-// App Settings repository functions
 import {
   getDebugMode,
   setDebugMode,
@@ -47,8 +38,6 @@ import {
   getAppSettings,
   clearAppSettings,
 } from '../storage/repositories/appSettings.js';
-
-// Provider Settings repository functions
 import {
   getProviderSettings,
   setActiveProvider,
@@ -64,21 +53,9 @@ import {
   hasReadyProvider,
   getConnectedProviderIds,
 } from '../storage/repositories/providerSettings.js';
-
-// Secure Storage
 import { SecureStorage } from '../internal/classes/SecureStorage.js';
-
-// Types
 import type { StorageAPI, StorageOptions } from '../types/storage.js';
 
-/**
- * Creates a Storage instance that implements the StorageAPI interface.
- * This factory composes all repository functions and secure storage into
- * a single unified interface for all storage operations.
- *
- * @param options - Configuration options for the storage system
- * @returns A StorageAPI instance
- */
 export function createStorage(options: StorageOptions = {}): StorageAPI {
   const {
     databasePath,
@@ -86,22 +63,15 @@ export function createStorage(options: StorageOptions = {}): StorageAPI {
     userDataPath,
   } = options;
 
-  // Create secure storage instance
-  // Use userDataPath if provided, otherwise use a default location
   const storagePath = userDataPath || process.cwd();
   const secureStorage = new SecureStorage({
     storagePath,
     appId: 'agent-core',
   });
 
-  // Track initialization state
   let initialized = false;
 
   return {
-    // ==========================================================================
-    // Task History Operations
-    // ==========================================================================
-
     getTasks() {
       return getTasks();
     },
@@ -149,10 +119,6 @@ export function createStorage(options: StorageOptions = {}): StorageAPI {
     clearTodosForTask(taskId) {
       return clearTodosForTask(taskId);
     },
-
-    // ==========================================================================
-    // App Settings Operations
-    // ==========================================================================
 
     getDebugMode() {
       return getDebugMode();
@@ -226,10 +192,6 @@ export function createStorage(options: StorageOptions = {}): StorageAPI {
       return clearAppSettings();
     },
 
-    // ==========================================================================
-    // Provider Settings Operations
-    // ==========================================================================
-
     getProviderSettings() {
       return getProviderSettings();
     },
@@ -282,10 +244,6 @@ export function createStorage(options: StorageOptions = {}): StorageAPI {
       return getConnectedProviderIds();
     },
 
-    // ==========================================================================
-    // Secure Storage Operations
-    // ==========================================================================
-
     storeApiKey(provider, apiKey) {
       return secureStorage.storeApiKey(provider, apiKey);
     },
@@ -318,10 +276,6 @@ export function createStorage(options: StorageOptions = {}): StorageAPI {
       return secureStorage.clearSecureStorage();
     },
 
-    // ==========================================================================
-    // Lifecycle Operations
-    // ==========================================================================
-
     initialize() {
       if (initialized && isDatabaseInitialized()) {
         return;
@@ -351,5 +305,4 @@ export function createStorage(options: StorageOptions = {}): StorageAPI {
   };
 }
 
-// Re-export types for convenience
 export type { StorageAPI, StorageOptions };

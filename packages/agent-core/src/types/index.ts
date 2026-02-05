@@ -1,11 +1,3 @@
-/**
- * Public API interfaces for agent-core
- *
- * This module exports all public API interfaces and their related types.
- * Consumers should use factory functions to create instances that implement these interfaces.
- */
-
-// Task Manager API
 export type {
   TaskManagerAPI,
   TaskManagerOptions,
@@ -14,7 +6,6 @@ export type {
   TaskProgressEvent,
 } from './task-manager.js';
 
-// Storage API
 export type {
   StorageAPI,
   StorageOptions,
@@ -22,7 +13,6 @@ export type {
   AppSettings,
 } from './storage.js';
 
-// Permission Handler API
 export type {
   PermissionHandlerAPI,
   PermissionHandlerOptions,
@@ -32,7 +22,6 @@ export type {
   PermissionValidationResult,
 } from './permission-handler.js';
 
-// Thought Stream API
 export type {
   ThoughtStreamAPI,
   ThoughtStreamOptions,
@@ -42,7 +31,6 @@ export type {
   CheckpointStatus,
 } from './thought-stream.js';
 
-// Log Writer API
 export type {
   LogWriterAPI,
   LogWriterOptions,
@@ -51,13 +39,11 @@ export type {
   LogEntry,
 } from './log-writer.js';
 
-// Skills Manager API
 export type {
   SkillsManagerAPI,
   SkillsManagerOptions,
 } from './skills-manager.js';
 
-// Speech Service API
 export type {
   SpeechServiceAPI,
   SpeechServiceOptions,
