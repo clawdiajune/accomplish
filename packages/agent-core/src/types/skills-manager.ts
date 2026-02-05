@@ -1,9 +1,17 @@
 import type { Skill } from '../common/types/skills';
 
+export interface SkillsManagerDatabase {
+  prepare(sql: string): {
+    all(...params: unknown[]): unknown[];
+    get(...params: unknown[]): unknown;
+    run(...params: unknown[]): unknown;
+  };
+}
+
 export interface SkillsManagerOptions {
   bundledSkillsPath: string;
   userSkillsPath: string;
-  database: unknown;
+  database: SkillsManagerDatabase;
 }
 
 export interface SkillsManagerAPI {

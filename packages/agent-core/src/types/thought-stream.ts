@@ -20,8 +20,6 @@ export interface CheckpointEvent {
   timestamp: number;
 }
 
-export interface ThoughtStreamOptions {}
-
 export interface ThoughtStreamAPI {
   registerTask(taskId: string): void;
   unregisterTask(taskId: string): void;

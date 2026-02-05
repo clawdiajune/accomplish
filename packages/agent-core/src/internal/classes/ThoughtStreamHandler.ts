@@ -24,31 +24,26 @@ export class ThoughtStreamHandler {
   }
 
   validateThoughtEvent(data: unknown): ThoughtEvent | null {
-    if (!this.isValidThoughtData(data)) {
-      return null;
-    }
-
-    const typed = data as ThoughtEvent;
-
-    if (!this.isTaskActive(typed.taskId)) {
-      return null;
-    }
-
-    return typed;
+    return this.validateEvent<ThoughtEvent>(data, this.isValidThoughtData.bind(this));
   }
 
   validateCheckpointEvent(data: unknown): CheckpointEvent | null {
-    if (!this.isValidCheckpointData(data)) {
+    return this.validateEvent<CheckpointEvent>(data, this.isValidCheckpointData.bind(this));
+  }
+
+  private validateEvent<T extends { taskId: string }>(
+    data: unknown,
+    isValid: (data: unknown) => data is T
+  ): T | null {
+    if (!isValid(data)) {
       return null;
     }
 
-    const typed = data as CheckpointEvent;
-
-    if (!this.isTaskActive(typed.taskId)) {
+    if (!this.isTaskActive(data.taskId)) {
       return null;
     }
 
-    return typed;
+    return data;
   }
 
   private isValidThoughtData(data: unknown): data is ThoughtEvent {

@@ -4,6 +4,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ApiKeyProvider } from '../../common/types/provider.js';
 
+const PBKDF2_ITERATIONS = 100000;
+const DERIVED_KEY_LENGTH_BYTES = 32;
+const AES_GCM_IV_LENGTH_BYTES = 12;
+const SALT_LENGTH_BYTES = 32;
+
 /**
  * AES-256-GCM encryption using machine-derived keys. Less secure than OS Keychain
  * (key derivation is reversible) but avoids permission prompts on macOS.
@@ -88,7 +93,7 @@ export class SecureStorage {
     const data = this.loadData();
 
     if (!data.salt) {
-      const salt = crypto.randomBytes(32);
+      const salt = crypto.randomBytes(SALT_LENGTH_BYTES);
       data.salt = salt.toString('base64');
       this.saveData();
     }
@@ -113,8 +118,8 @@ export class SecureStorage {
     this.derivedKey = crypto.pbkdf2Sync(
       machineData,
       salt,
-      100000,
-      32,
+      PBKDF2_ITERATIONS,
+      DERIVED_KEY_LENGTH_BYTES,
       'sha256'
     );
 
@@ -123,7 +128,7 @@ export class SecureStorage {
 
   private encryptValue(value: string): string {
     const key = this.getDerivedKey();
-    const iv = crypto.randomBytes(12);
+    const iv = crypto.randomBytes(AES_GCM_IV_LENGTH_BYTES);
 
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 

@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import matter from 'gray-matter';
-import type { Database } from 'better-sqlite3';
 import type { Skill, SkillSource, SkillFrontmatter } from '../../common/types/skills.js';
+import type { SkillsManagerDatabase } from '../../types/skills-manager.js';
 
 interface SkillRow {
   id: string;
@@ -21,7 +21,7 @@ interface SkillRow {
 export interface SkillsManagerOptions {
   bundledSkillsPath: string;
   userSkillsPath: string;
-  database: Database;
+  database: SkillsManagerDatabase;
 }
 
 function rowToSkill(row: SkillRow): Skill {
@@ -43,7 +43,7 @@ function rowToSkill(row: SkillRow): Skill {
 export class SkillsManager {
   private readonly bundledSkillsPath: string;
   private readonly userSkillsPath: string;
-  private readonly db: Database;
+  private readonly db: SkillsManagerDatabase;
   private initialized = false;
 
   constructor(options: SkillsManagerOptions) {

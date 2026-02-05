@@ -1,5 +1,5 @@
 import { fetchWithTimeout } from '../../utils/fetch.js';
-import type { SecureStorage } from './SecureStorage.js';
+import type { SpeechServiceStorage } from '../../types/speech.js';
 
 const ELEVENLABS_API_TIMEOUT_MS = 30000;
 const DEFAULT_ELEVENLABS_STT_MODEL_ID = 'scribe_v2';
@@ -17,9 +17,9 @@ export interface TranscriptionError {
 }
 
 export class SpeechService {
-  private storage: SecureStorage;
+  private storage: SpeechServiceStorage;
 
-  constructor(storage: SecureStorage) {
+  constructor(storage: SpeechServiceStorage) {
     this.storage = storage;
   }
 
@@ -270,6 +270,6 @@ export class SpeechService {
   }
 }
 
-export function createSpeechService(storage: SecureStorage): SpeechService {
+export function createSpeechService(storage: SpeechServiceStorage): SpeechService {
   return new SpeechService(storage);
 }

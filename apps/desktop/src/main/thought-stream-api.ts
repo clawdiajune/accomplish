@@ -67,18 +67,22 @@ export function startThoughtStreamServer(): http.Server {
       return;
     }
 
-    const taskId = data.taskId as string;
-    if (!taskId || !thoughtStreamHandler.isTaskActive(taskId)) {
-      // Fire-and-forget: return 200 even for unknown tasks
-      res.writeHead(200);
-      res.end();
-      return;
-    }
-
     if (req.url === '/thought') {
-      handleThought(data as unknown as ThoughtEvent, res);
+      const event = thoughtStreamHandler.validateThoughtEvent(data);
+      if (!event) {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+      handleThought(event, res);
     } else if (req.url === '/checkpoint') {
-      handleCheckpoint(data as unknown as CheckpointEvent, res);
+      const event = thoughtStreamHandler.validateCheckpointEvent(data);
+      if (!event) {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+      handleCheckpoint(event, res);
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));

@@ -8,7 +8,7 @@ export function createSkillsManager(options: SkillsManagerOptions): SkillsManage
   const manager = new SkillsManager({
     bundledSkillsPath: options.bundledSkillsPath,
     userSkillsPath: options.userSkillsPath,
-    database: options.database as any, // Type assertion since database is opaque in public API
+    database: options.database,
   });
   return manager;
 }

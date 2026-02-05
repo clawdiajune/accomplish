@@ -24,7 +24,6 @@ export type {
 
 export type {
   ThoughtStreamAPI,
-  ThoughtStreamOptions,
   ThoughtEvent,
   CheckpointEvent,
   ThoughtCategory,
@@ -42,11 +41,13 @@ export type {
 export type {
   SkillsManagerAPI,
   SkillsManagerOptions,
+  SkillsManagerDatabase,
 } from './skills-manager.js';
 
 export type {
   SpeechServiceAPI,
   SpeechServiceOptions,
+  SpeechServiceStorage,
   TranscriptionResult,
   TranscriptionError,
 } from './speech.js';

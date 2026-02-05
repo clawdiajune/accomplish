@@ -703,16 +703,20 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     });
   }
 
+  private generateId(prefix: string): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  }
+
   private generateTaskId(): string {
-    return `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    return this.generateId('task');
   }
 
   private generateMessageId(): string {
-    return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    return this.generateId('msg');
   }
 
   private generateRequestId(): string {
-    return `req_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    return this.generateId('req');
   }
 
   private isStartTaskTool(toolName: string): boolean {

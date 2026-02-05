@@ -10,8 +10,12 @@ export interface TranscriptionError {
   message: string;
 }
 
+export interface SpeechServiceStorage {
+  getApiKey(provider: string): string | null;
+}
+
 export interface SpeechServiceOptions {
-  storage: unknown;
+  storage: SpeechServiceStorage;
 }
 
 export interface SpeechServiceAPI {

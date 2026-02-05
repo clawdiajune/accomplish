@@ -1,11 +1,10 @@
-import { app } from 'electron';
 import {
   createSpeechService,
-  createStorage,
   type SpeechServiceAPI,
   type TranscriptionResult,
   type TranscriptionError,
 } from '@accomplish/agent-core';
+import { getStorage } from '../store/secureStorage';
 
 export type { TranscriptionResult, TranscriptionError };
 
@@ -13,10 +12,7 @@ let _speechService: SpeechServiceAPI | null = null;
 
 function getSpeechService(): SpeechServiceAPI {
   if (!_speechService) {
-    const storage = createStorage({
-      userDataPath: app.getPath('userData'),
-    });
-    _speechService = createSpeechService({ storage });
+    _speechService = createSpeechService({ storage: getStorage() });
   }
   return _speechService;
 }

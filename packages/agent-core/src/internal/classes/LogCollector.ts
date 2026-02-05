@@ -27,35 +27,21 @@ export class LogCollector {
 
     this.writer.initialize();
 
-    // Wrap original console calls in try-catch to handle EIO errors when stdout is unavailable
-    // (e.g., when terminal is closed or during app shutdown)
-    console.log = (...args: unknown[]) => {
-      try {
-        originalConsole.log(...args);
-      } catch {}
-      this.captureConsole('INFO', args);
-    };
+    const consoleOverrides: Array<[keyof typeof originalConsole, LogLevel]> = [
+      ['log', 'INFO'],
+      ['warn', 'WARN'],
+      ['error', 'ERROR'],
+      ['debug', 'DEBUG'],
+    ];
 
-    console.warn = (...args: unknown[]) => {
-      try {
-        originalConsole.warn(...args);
-      } catch {}
-      this.captureConsole('WARN', args);
-    };
-
-    console.error = (...args: unknown[]) => {
-      try {
-        originalConsole.error(...args);
-      } catch {}
-      this.captureConsole('ERROR', args);
-    };
-
-    console.debug = (...args: unknown[]) => {
-      try {
-        originalConsole.debug(...args);
-      } catch {}
-      this.captureConsole('DEBUG', args);
-    };
+    for (const [method, level] of consoleOverrides) {
+      console[method] = (...args: unknown[]) => {
+        try {
+          originalConsole[method](...args);
+        } catch {}
+        this.captureConsole(level, args);
+      };
+    }
 
     this.initialized = true;
 
