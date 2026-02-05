@@ -8,10 +8,10 @@
 
 import {
   FILE_OPERATIONS,
-  PERMISSION_REQUEST_TIMEOUT_MS,
   createFilePermissionRequestId,
   createQuestionRequestId,
 } from '../common/index.js';
+import { PERMISSION_REQUEST_TIMEOUT_MS } from '../constants/ports.js';
 import type { FileOperation, PermissionRequest, PermissionOption } from '../common/types/permission.js';
 
 /**
