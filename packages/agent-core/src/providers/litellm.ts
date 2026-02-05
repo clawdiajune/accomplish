@@ -1,4 +1,4 @@
-import type { LiteLLMModel, LiteLLMConfig } from '../shared/types/provider.js';
+import type { LiteLLMModel, LiteLLMConfig } from '../common/types/provider.js';
 import { fetchWithTimeout } from '../utils/fetch.js';
 import { validateHttpUrl } from '../utils/url.js';
 import { sanitizeString } from '../utils/sanitize.js';

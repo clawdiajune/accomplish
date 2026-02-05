@@ -1,4 +1,4 @@
-import type { BedrockCredentials } from '../shared/types/auth.js';
+import type { BedrockCredentials } from '../common/types/auth.js';
 
 /**
  * API keys for various providers.

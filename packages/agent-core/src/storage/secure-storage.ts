@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ApiKeyProvider } from '../shared/types/provider.js';
+import type { ApiKeyProvider } from '../common/types/provider.js';
 
 /**
  * AES-256-GCM encryption using machine-derived keys. Less secure than OS Keychain

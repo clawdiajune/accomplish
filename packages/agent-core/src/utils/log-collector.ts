@@ -6,8 +6,8 @@
  * a LogFileWriter instance to be injected.
  */
 
-import { type LogLevel, type LogSource } from '../shared/types/logging.js';
-import { detectLogSource } from '../shared/utils/log-source-detector.js';
+import { type LogLevel, type LogSource } from '../common/types/logging.js';
+import { detectLogSource } from '../common/utils/log-source-detector.js';
 
 import { LogFileWriter } from './log-file-writer.js';
 

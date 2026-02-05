@@ -1,6 +1,6 @@
 'use client';
 
-import type { Task } from '@accomplish/agent-core/browser';
+import type { Task } from '@accomplish/agent-core/common';
 import { cn } from '@/lib/utils';
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 

@@ -1,9 +1,4 @@
-// =============================================================================
-// @accomplish/agent-core/browser - Browser-safe exports
-// =============================================================================
-// This file exports only browser-safe code (types, constants, pure functions).
-// Use this entry point for renderer/browser contexts.
-// =============================================================================
+// packages/shared/src/index.ts
 
 // === TYPES ===
 
@@ -17,8 +12,8 @@ export type {
   TaskResult,
   TaskProgress,
   TaskUpdateEvent,
-} from './shared/types/task.js';
-export { STARTUP_STAGES } from './shared/types/task.js';
+} from './types/task.js';
+export { STARTUP_STAGES } from './types/task.js';
 
 // Permission types
 export type {
@@ -26,12 +21,12 @@ export type {
   PermissionRequest,
   PermissionOption,
   PermissionResponse,
-} from './shared/types/permission.js';
+} from './types/permission.js';
 export {
   FILE_OPERATIONS,
   FILE_PERMISSION_REQUEST_PREFIX,
   QUESTION_REQUEST_PREFIX,
-} from './shared/types/permission.js';
+} from './types/permission.js';
 
 // Provider types
 export type {
@@ -45,14 +40,14 @@ export type {
   LiteLLMModel,
   LiteLLMConfig,
   LMStudioConfig,
-} from './shared/types/provider.js';
+} from './types/provider.js';
 export {
   DEFAULT_PROVIDERS,
   DEFAULT_MODEL,
   ALLOWED_API_KEY_PROVIDERS,
   STANDARD_VALIDATION_PROVIDERS,
   ZAI_ENDPOINTS,
-} from './shared/types/provider.js';
+} from './types/provider.js';
 
 // Provider settings types
 export type {
@@ -74,7 +69,7 @@ export type {
   ToolSupportStatus,
   ConnectedProvider,
   ProviderSettings,
-} from './shared/types/providerSettings.js';
+} from './types/providerSettings.js';
 export {
   PROVIDER_META,
   DEFAULT_MODELS,
@@ -83,7 +78,7 @@ export {
   hasAnyReadyProvider,
   getActiveProvider,
   getDefaultModelForProvider,
-} from './shared/types/providerSettings.js';
+} from './types/providerSettings.js';
 
 // Auth types
 export type {
@@ -92,7 +87,7 @@ export type {
   BedrockAccessKeyCredentials,
   BedrockProfileCredentials,
   BedrockApiKeyCredentials,
-} from './shared/types/auth.js';
+} from './types/auth.js';
 
 // OpenCode message types
 export type {
@@ -105,15 +100,15 @@ export type {
   OpenCodeToolResultMessage,
   OpenCodeStepFinishMessage,
   OpenCodeErrorMessage,
-} from './shared/types/opencode.js';
+} from './types/opencode.js';
 
 // Skills types
-export type { SkillSource, Skill, SkillFrontmatter } from './shared/types/skills.js';
+export type { SkillSource, Skill, SkillFrontmatter } from './types/skills.js';
 
 // Other types
-export type { TodoItem } from './shared/types/todo.js';
-export type { LogLevel, LogSource, LogEntry } from './shared/types/logging.js';
-export type { ThoughtEvent, CheckpointEvent } from './shared/types/thought-stream.js';
+export type { TodoItem } from './types/todo.js';
+export type { LogLevel, LogSource, LogEntry } from './types/logging.js';
+export type { ThoughtEvent, CheckpointEvent } from './types/thought-stream.js';
 
 // === CONSTANTS ===
 export {
@@ -127,15 +122,15 @@ export {
   LOG_RETENTION_DAYS,
   LOG_BUFFER_FLUSH_INTERVAL_MS,
   LOG_BUFFER_MAX_ENTRIES,
-} from './shared/constants.js';
+} from './constants.js';
 
 export {
   MODEL_DISPLAY_NAMES,
   PROVIDER_PREFIXES,
   getModelDisplayName,
-} from './shared/constants/model-display.js';
+} from './constants/model-display.js';
 
-// === BROWSER-SAFE UTILS ===
+// === UTILS ===
 export {
   createTaskId,
   createMessageId,
@@ -143,10 +138,10 @@ export {
   createQuestionRequestId,
   isFilePermissionRequest,
   isQuestionRequest,
-} from './shared/utils/id.js';
+} from './utils/id.js';
 
-export { isWaitingForUser } from './shared/utils/waiting-detection.js';
-export { detectLogSource, LOG_SOURCE_PATTERNS } from './shared/utils/log-source-detector.js';
+export { isWaitingForUser } from './utils/waiting-detection.js';
+export { detectLogSource, LOG_SOURCE_PATTERNS } from './utils/log-source-detector.js';
 
 // === SCHEMAS ===
 export {
@@ -154,4 +149,4 @@ export {
   permissionResponseSchema,
   resumeSessionSchema,
   validate,
-} from './shared/schemas/validation.js';
+} from './schemas/validation.js';

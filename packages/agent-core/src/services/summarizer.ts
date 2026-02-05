@@ -5,7 +5,7 @@
  * Uses the first available API key, preferring Anthropic for speed/cost.
  */
 
-import type { ApiKeyProvider } from '../shared/types/provider.js';
+import type { ApiKeyProvider } from '../common/types/provider.js';
 
 const SUMMARY_PROMPT = `Generate a very short title (3-5 words max) that summarizes this task request.
 The title should be in sentence case, no quotes, no punctuation at end.

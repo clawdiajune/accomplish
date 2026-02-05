@@ -3,7 +3,7 @@ import {
   DEFAULT_MODEL,
   type ProviderType,
   type ModelConfig,
-} from '../shared/types/provider.js';
+} from '../common/types/provider.js';
 
 export { DEFAULT_PROVIDERS, DEFAULT_MODEL };
 

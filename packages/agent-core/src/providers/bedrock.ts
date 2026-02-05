@@ -1,6 +1,6 @@
 import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 import { fromIni } from '@aws-sdk/credential-providers';
-import type { BedrockCredentials } from '../shared/types/auth.js';
+import type { BedrockCredentials } from '../common/types/auth.js';
 import { safeParseJson } from '../utils/json.js';
 import type { ValidationResult } from './validation.js';
 

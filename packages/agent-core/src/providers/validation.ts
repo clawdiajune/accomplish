@@ -1,6 +1,6 @@
-import type { ProviderType } from '../shared/types/provider.js';
-import { ZAI_ENDPOINTS } from '../shared/types/provider.js';
-import type { ZaiRegion } from '../shared/types/providerSettings.js';
+import type { ProviderType } from '../common/types/provider.js';
+import { ZAI_ENDPOINTS } from '../common/types/provider.js';
+import type { ZaiRegion } from '../common/types/providerSettings.js';
 
 import { fetchWithTimeout } from '../utils/fetch.js';
 

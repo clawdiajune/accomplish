@@ -1,4 +1,4 @@
-import type { TaskStatus, TaskResult } from '../shared/types/task.js';
+import type { TaskStatus, TaskResult } from '../common/types/task.js';
 
 /**
  * Maps a TaskResult status to a TaskStatus.

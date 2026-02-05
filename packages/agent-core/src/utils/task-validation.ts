@@ -1,4 +1,4 @@
-import type { TaskConfig } from '../shared/types/task.js';
+import type { TaskConfig } from '../common/types/task.js';
 import { sanitizeString } from './sanitize.js';
 
 /**

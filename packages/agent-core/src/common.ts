@@ -1,4 +1,9 @@
-// packages/shared/src/index.ts
+// =============================================================================
+// @accomplish/agent-core/common - Browser-safe exports
+// =============================================================================
+// This file exports only browser-safe code (types, constants, pure functions).
+// Use this entry point for renderer/browser contexts.
+// =============================================================================
 
 // === TYPES ===
 
@@ -12,8 +17,8 @@ export type {
   TaskResult,
   TaskProgress,
   TaskUpdateEvent,
-} from './types/task.js';
-export { STARTUP_STAGES } from './types/task.js';
+} from './common/types/task.js';
+export { STARTUP_STAGES } from './common/types/task.js';
 
 // Permission types
 export type {
@@ -21,12 +26,12 @@ export type {
   PermissionRequest,
   PermissionOption,
   PermissionResponse,
-} from './types/permission.js';
+} from './common/types/permission.js';
 export {
   FILE_OPERATIONS,
   FILE_PERMISSION_REQUEST_PREFIX,
   QUESTION_REQUEST_PREFIX,
-} from './types/permission.js';
+} from './common/types/permission.js';
 
 // Provider types
 export type {
@@ -40,14 +45,14 @@ export type {
   LiteLLMModel,
   LiteLLMConfig,
   LMStudioConfig,
-} from './types/provider.js';
+} from './common/types/provider.js';
 export {
   DEFAULT_PROVIDERS,
   DEFAULT_MODEL,
   ALLOWED_API_KEY_PROVIDERS,
   STANDARD_VALIDATION_PROVIDERS,
   ZAI_ENDPOINTS,
-} from './types/provider.js';
+} from './common/types/provider.js';
 
 // Provider settings types
 export type {
@@ -69,7 +74,7 @@ export type {
   ToolSupportStatus,
   ConnectedProvider,
   ProviderSettings,
-} from './types/providerSettings.js';
+} from './common/types/providerSettings.js';
 export {
   PROVIDER_META,
   DEFAULT_MODELS,
@@ -78,7 +83,7 @@ export {
   hasAnyReadyProvider,
   getActiveProvider,
   getDefaultModelForProvider,
-} from './types/providerSettings.js';
+} from './common/types/providerSettings.js';
 
 // Auth types
 export type {
@@ -87,7 +92,7 @@ export type {
   BedrockAccessKeyCredentials,
   BedrockProfileCredentials,
   BedrockApiKeyCredentials,
-} from './types/auth.js';
+} from './common/types/auth.js';
 
 // OpenCode message types
 export type {
@@ -100,15 +105,15 @@ export type {
   OpenCodeToolResultMessage,
   OpenCodeStepFinishMessage,
   OpenCodeErrorMessage,
-} from './types/opencode.js';
+} from './common/types/opencode.js';
 
 // Skills types
-export type { SkillSource, Skill, SkillFrontmatter } from './types/skills.js';
+export type { SkillSource, Skill, SkillFrontmatter } from './common/types/skills.js';
 
 // Other types
-export type { TodoItem } from './types/todo.js';
-export type { LogLevel, LogSource, LogEntry } from './types/logging.js';
-export type { ThoughtEvent, CheckpointEvent } from './types/thought-stream.js';
+export type { TodoItem } from './common/types/todo.js';
+export type { LogLevel, LogSource, LogEntry } from './common/types/logging.js';
+export type { ThoughtEvent, CheckpointEvent } from './common/types/thought-stream.js';
 
 // === CONSTANTS ===
 export {
@@ -122,15 +127,15 @@ export {
   LOG_RETENTION_DAYS,
   LOG_BUFFER_FLUSH_INTERVAL_MS,
   LOG_BUFFER_MAX_ENTRIES,
-} from './constants.js';
+} from './common/constants.js';
 
 export {
   MODEL_DISPLAY_NAMES,
   PROVIDER_PREFIXES,
   getModelDisplayName,
-} from './constants/model-display.js';
+} from './common/constants/model-display.js';
 
-// === UTILS ===
+// === BROWSER-SAFE UTILS ===
 export {
   createTaskId,
   createMessageId,
@@ -138,12 +143,10 @@ export {
   createQuestionRequestId,
   isFilePermissionRequest,
   isQuestionRequest,
-} from './utils/id.js';
+} from './common/utils/id.js';
 
-export { stripAnsi, quoteForShell, getPlatformShell, getShellArgs } from './utils/shell.js';
-export { isPortInUse, waitForPortRelease } from './utils/network.js';
-export { isWaitingForUser } from './utils/waiting-detection.js';
-export { detectLogSource, LOG_SOURCE_PATTERNS } from './utils/log-source-detector.js';
+export { isWaitingForUser } from './common/utils/waiting-detection.js';
+export { detectLogSource, LOG_SOURCE_PATTERNS } from './common/utils/log-source-detector.js';
 
 // === SCHEMAS ===
 export {
@@ -151,4 +154,4 @@ export {
   permissionResponseSchema,
   resumeSessionSchema,
   validate,
-} from './schemas/validation.js';
+} from './common/schemas/validation.js';

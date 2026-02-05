@@ -1,4 +1,4 @@
-import type { AzureFoundryConfig } from '../shared/types/provider.js';
+import type { AzureFoundryConfig } from '../common/types/provider.js';
 
 import { fetchWithTimeout } from '../utils/fetch.js';
 import { sanitizeString } from '../utils/sanitize.js';

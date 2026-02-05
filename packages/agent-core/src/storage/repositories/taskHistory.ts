@@ -1,5 +1,5 @@
-import type { Task, TaskMessage, TaskStatus, TaskAttachment } from '../../shared/types/task.js';
-import type { TodoItem } from '../../shared/types/todo.js';
+import type { Task, TaskMessage, TaskStatus, TaskAttachment } from '../../common/types/task.js';
+import type { TodoItem } from '../../common/types/todo.js';
 import { getDatabase } from '../database.js';
 
 export interface StoredTask {

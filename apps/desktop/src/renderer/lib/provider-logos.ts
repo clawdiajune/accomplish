@@ -1,4 +1,4 @@
-import type { ProviderId } from '@accomplish/agent-core/browser';
+import type { ProviderId } from '@accomplish/agent-core/common';
 import anthropicLogo from '/assets/ai-logos/anthropic.svg';
 import openaiLogo from '/assets/ai-logos/openai.svg';
 import googleLogo from '/assets/ai-logos/google.svg';

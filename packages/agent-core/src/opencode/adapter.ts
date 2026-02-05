@@ -6,10 +6,10 @@ import { spawn } from 'child_process';
 import { StreamParser } from './stream-parser.js';
 import { OpenCodeLogWatcher, createLogWatcher, OpenCodeLogError } from './log-watcher.js';
 import { CompletionEnforcer, CompletionEnforcerCallbacks } from './completion/index.js';
-import type { TaskConfig, Task, TaskMessage, TaskResult } from '../shared/types/task.js';
-import type { OpenCodeMessage } from '../shared/types/opencode.js';
-import type { PermissionRequest } from '../shared/types/permission.js';
-import type { TodoItem } from '../shared/types/todo.js';
+import type { TaskConfig, Task, TaskMessage, TaskResult } from '../common/types/task.js';
+import type { OpenCodeMessage } from '../common/types/opencode.js';
+import type { PermissionRequest } from '../common/types/permission.js';
+import type { TodoItem } from '../common/types/todo.js';
 
 export class OpenCodeCliNotFoundError extends Error {
   constructor() {
@@ -442,7 +442,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         break;
 
       case 'tool_use':
-        const toolUseMessage = message as import('../shared/types/opencode.js').OpenCodeToolUseMessage;
+        const toolUseMessage = message as import('../common/types/opencode.js').OpenCodeToolUseMessage;
         const toolUseName = toolUseMessage.part.tool || 'unknown';
         const toolUseInput = toolUseMessage.part.state?.input;
         const toolUseOutput = toolUseMessage.part.state?.output || '';
@@ -462,7 +462,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
               type: 'text',
               text: toolDescription,
             },
-          } as import('../shared/types/opencode.js').OpenCodeTextMessage;
+          } as import('../common/types/opencode.js').OpenCodeTextMessage;
           this.emit('message', syntheticTextMessage);
         }
 
@@ -749,7 +749,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         type: 'text',
         text: planText,
       },
-    } as import('../shared/types/opencode.js').OpenCodeTextMessage;
+    } as import('../common/types/opencode.js').OpenCodeTextMessage;
 
     this.emit('message', syntheticMessage);
     console.log('[OpenCode Adapter] Emitted synthetic plan message');

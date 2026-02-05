@@ -6,7 +6,7 @@ import type {
   ProviderSettings,
   ProviderId,
   ConnectedProvider,
-} from '@accomplish/agent-core/browser';
+} from '@accomplish/agent-core/common';
 
 export function useProviderSettings() {
   const [settings, setSettings] = useState<ProviderSettings | null>(null);

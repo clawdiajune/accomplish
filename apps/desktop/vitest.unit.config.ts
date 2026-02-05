@@ -12,7 +12,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src/renderer'),
       '@main': path.resolve(__dirname, 'src/main'),
       '@renderer': path.resolve(__dirname, 'src/renderer'),
-      '@accomplish/agent-core/browser': path.resolve(__dirname, '../../packages/agent-core/src/browser'),
+      '@accomplish/agent-core/common': path.resolve(__dirname, '../../packages/agent-core/src/common'),
       '@accomplish/agent-core': path.resolve(__dirname, '../../packages/agent-core/src'),
     },
   },

@@ -1,13 +1,13 @@
 import path from 'path';
 import fs from 'fs';
-import type { ProviderId, ZaiCredentials } from '../shared/types/providerSettings.js';
-import type { BedrockCredentials } from '../shared/types/auth.js';
-import type { ProviderSettings } from '../shared/types/providerSettings.js';
+import type { ProviderId, ZaiCredentials } from '../common/types/providerSettings.js';
+import type { BedrockCredentials } from '../common/types/auth.js';
+import type { ProviderSettings } from '../common/types/providerSettings.js';
 import {
   ZAI_ENDPOINTS,
   DEFAULT_PROVIDERS,
   PROVIDER_ID_TO_OPENCODE,
-} from '../shared/index.js';
+} from '../common/index.js';
 import type { ProviderConfig, ProviderModelConfig } from './config-generator.js';
 import { ensureAzureFoundryProxy, ensureMoonshotProxy } from './proxies/index.js';
 import {

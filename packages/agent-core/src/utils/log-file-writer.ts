@@ -1,13 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-import type { LogLevel, LogSource, LogEntry } from '../shared/types/logging.js';
+import type { LogLevel, LogSource, LogEntry } from '../common/types/logging.js';
 import {
   LOG_MAX_FILE_SIZE_BYTES,
   LOG_RETENTION_DAYS,
   LOG_BUFFER_FLUSH_INTERVAL_MS,
   LOG_BUFFER_MAX_ENTRIES,
-} from '../shared/constants.js';
+} from '../common/constants.js';
 
 import { redact } from './redact.js';
 

@@ -4,7 +4,7 @@ import type {
   LiteLLMConfig,
   AzureFoundryConfig,
   LMStudioConfig,
-} from '../../shared/types/provider.js';
+} from '../../common/types/provider.js';
 import { getDatabase } from '../database.js';
 import { safeParseJsonWithFallback } from '../../utils/json.js';
 

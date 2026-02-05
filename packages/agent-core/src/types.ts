@@ -1,5 +1,5 @@
-import type { PermissionRequest, PermissionResponse } from './shared/types/permission.js';
-import type { TaskMessage, TaskProgress, TaskResult } from './shared/types/task.js';
+import type { PermissionRequest, PermissionResponse } from './common/types/permission.js';
+import type { TaskMessage, TaskProgress, TaskResult } from './common/types/task.js';
 
 export interface PlatformConfig {
   userDataPath: string;

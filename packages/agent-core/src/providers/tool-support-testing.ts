@@ -1,4 +1,4 @@
-import type { ToolSupportStatus } from '../shared/types/providerSettings.js';
+import type { ToolSupportStatus } from '../common/types/providerSettings.js';
 
 /**
  * Options for testing tool support on a local LLM model

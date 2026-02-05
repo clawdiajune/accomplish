@@ -1,6 +1,6 @@
-import type { OpenCodeMessage, OpenCodeToolUseMessage } from '../shared/types/opencode.js';
-import type { TaskMessage } from '../shared/types/task.js';
-import { createMessageId } from '../shared/index.js';
+import type { OpenCodeMessage, OpenCodeToolUseMessage } from '../common/types/opencode.js';
+import type { TaskMessage } from '../common/types/task.js';
+import { createMessageId } from '../common/index.js';
 
 /**
  * Delay in milliseconds for batching messages before sending to renderer.

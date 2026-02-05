@@ -1,5 +1,5 @@
-import type { ToolSupportStatus } from '../shared/types/providerSettings.js';
-import type { LMStudioConfig } from '../shared/types/provider.js';
+import type { ToolSupportStatus } from '../common/types/providerSettings.js';
+import type { LMStudioConfig } from '../common/types/provider.js';
 import { fetchWithTimeout } from '../utils/fetch.js';
 import { validateHttpUrl } from '../utils/url.js';
 import { sanitizeString } from '../utils/sanitize.js';

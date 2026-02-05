@@ -16,7 +16,7 @@
     "paths": {
       "@/*": ["src/renderer/*"],
       "@main/*": ["src/main/*"],
-      "@accomplish/agent-core/browser": ["../../packages/agent-core/src/browser.ts"],
+      "@accomplish/agent-core/common": ["../../packages/agent-core/src/common.ts"],
       "@accomplish/agent-core": ["../../packages/agent-core/src/index.ts"],
       "@accomplish/agent-core/*": ["../../packages/agent-core/src/*"]
     }

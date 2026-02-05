@@ -11,8 +11,8 @@ import {
   PERMISSION_REQUEST_TIMEOUT_MS,
   createFilePermissionRequestId,
   createQuestionRequestId,
-} from '../shared/index.js';
-import type { FileOperation, PermissionRequest, PermissionOption } from '../shared/types/permission.js';
+} from '../common/index.js';
+import type { FileOperation, PermissionRequest, PermissionOption } from '../common/types/permission.js';
 
 /**
  * Generic pending request interface

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Paperclip } from 'lucide-react';
-import type { Skill } from '@accomplish/agent-core/browser';
+import type { Skill } from '@accomplish/agent-core/common';
 import {
   DropdownMenu,
   DropdownMenuContent,

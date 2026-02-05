@@ -1,6 +1,6 @@
 import { CompletionState, CompletionFlowState, CompleteTaskArgs } from './completion-state.js';
 import { getContinuationPrompt, getPartialContinuationPrompt } from './prompts.js';
-import type { TodoItem } from '../../shared/types/todo.js';
+import type { TodoItem } from '../../common/types/todo.js';
 
 export interface CompletionEnforcerCallbacks {
   onStartContinuation: (prompt: string) => Promise<void>;

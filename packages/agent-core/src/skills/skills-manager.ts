@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import matter from 'gray-matter';
 import type { Database } from 'better-sqlite3';
-import type { Skill, SkillSource, SkillFrontmatter } from '../shared/types/skills.js';
+import type { Skill, SkillSource, SkillFrontmatter } from '../common/types/skills.js';
 
 interface SkillRow {
   id: string;

@@ -6,7 +6,7 @@
  * and IPC forwarding remain in the desktop app.
  */
 
-import type { ThoughtEvent, CheckpointEvent } from '../shared/types/thought-stream.js';
+import type { ThoughtEvent, CheckpointEvent } from '../common/types/thought-stream.js';
 
 /**
  * Handler for thought stream events from MCP tools.

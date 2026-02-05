@@ -1,4 +1,4 @@
-import type { ToolSupportStatus } from '../shared/types/providerSettings.js';
+import type { ToolSupportStatus } from '../common/types/providerSettings.js';
 
 import { fetchWithTimeout } from '../utils/fetch.js';
 import { validateHttpUrl } from '../utils/url.js';

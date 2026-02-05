@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
-import type { ProviderId } from '../shared/types/providerSettings.js';
-import type { Skill } from '../shared/types/skills.js';
+import type { ProviderId } from '../common/types/providerSettings.js';
+import type { Skill } from '../common/types/skills.js';
 
 export const ACCOMPLISH_AGENT_NAME = 'accomplish';
 

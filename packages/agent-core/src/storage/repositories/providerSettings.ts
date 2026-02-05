@@ -3,7 +3,7 @@ import type {
   ProviderId,
   ConnectedProvider,
   ProviderCredentials,
-} from '../../shared/types/providerSettings.js';
+} from '../../common/types/providerSettings.js';
 import { getDatabase } from '../database.js';
 import { safeParseJsonWithFallback } from '../../utils/json.js';
 

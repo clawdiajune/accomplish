@@ -1,4 +1,4 @@
-import type { Skill, SkillSource } from '../../shared/types/skills.js';
+import type { Skill, SkillSource } from '../../common/types/skills.js';
 import { getDatabase } from '../database.js';
 
 interface SkillRow {
