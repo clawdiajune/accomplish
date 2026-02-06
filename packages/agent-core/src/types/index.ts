@@ -20,6 +20,11 @@ export type {
   StorageOptions,
   StoredTask,
   AppSettings,
+  TaskStorageAPI,
+  AppSettingsAPI,
+  ProviderSettingsAPI,
+  SecureStorageAPI,
+  DatabaseLifecycleAPI,
 } from './storage.js';
 
 // Permission Handler API

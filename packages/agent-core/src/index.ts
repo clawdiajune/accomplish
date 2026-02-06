@@ -43,6 +43,11 @@ export type {
   StorageOptions,
   StoredTask,
   AppSettings,
+  TaskStorageAPI,
+  AppSettingsAPI,
+  ProviderSettingsAPI,
+  SecureStorageAPI,
+  DatabaseLifecycleAPI,
   // Permission Handler API
   PermissionHandlerAPI,
   PermissionHandlerOptions,
