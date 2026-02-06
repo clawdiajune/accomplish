@@ -105,29 +105,46 @@ jobs:
               comment.body.includes('Preview release published')
             );
 
-            const body = `## 📦 Preview release published!
+            const commitSha = '${{ github.event.pull_request.head.sha }}';
+            const shortSha = commitSha.substring(0, 7);
+            const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 
-            **Version:** \`${version}\`
+            const latestEntry = `| \`${version}\` | [\`${shortSha}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${commitSha}) | ${timestamp} |`;
 
-            Install with:
+            if (botComment) {
+              // Append new release to existing comment
+              const existingBody = botComment.body;
+
+              // Update the install command to latest version
+              const updatedBody = existingBody
+                .replace(/npm install @accomplish_ai\/agent-core@0\.\d+\.\d+-pr-\d+-\d+/,
+                  `npm install @accomplish_ai/agent-core@${version}`)
+                .replace(/(<!-- RELEASES -->)/, `$1\n${latestEntry}`);
+
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: updatedBody
+              });
+            } else {
+              // Create new comment with release history table
+              const body = `## 📦 Preview release published!
+
+            Install latest with:
             \`\`\`bash
             npm install @accomplish_ai/agent-core@${version}
             # or
             npm install @accomplish_ai/agent-core@pr-${prNumber}
             \`\`\`
 
-            This preview release was built from commit ${{ github.event.pull_request.head.sha }}.`;
+            ### Release History
 
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              // Create new comment
+            | Version | Commit | Published |
+            |---------|--------|-----------|
+            <!-- RELEASES -->
+            ${latestEntry}`;
+
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
