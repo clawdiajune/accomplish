@@ -1,18 +1,10 @@
-export type ProviderId =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'xai'
-  | 'deepseek'
-  | 'moonshot'
-  | 'zai'
-  | 'bedrock'
-  | 'azure-foundry'
-  | 'ollama'
-  | 'openrouter'
-  | 'litellm'
-  | 'minimax'
-  | 'lmstudio';
+/** All providers that appear in the UI with metadata (PROVIDER_META keys) */
+export const PROVIDER_IDS = [
+  'anthropic', 'openai', 'google', 'xai', 'deepseek', 'moonshot', 'zai',
+  'bedrock', 'azure-foundry', 'ollama', 'openrouter', 'litellm', 'minimax', 'lmstudio',
+] as const;
+
+export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type ProviderCategory = 'classic' | 'aws' | 'azure' | 'local' | 'proxy' | 'hybrid';
 

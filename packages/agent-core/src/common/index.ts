@@ -42,6 +42,9 @@ export type {
   LMStudioConfig,
 } from './types/provider.js';
 export {
+  PROVIDER_TYPES,
+  API_KEY_PROVIDERS,
+  STANDARD_VALIDATION_PROVIDER_IDS,
   DEFAULT_PROVIDERS,
   DEFAULT_MODEL,
   ALLOWED_API_KEY_PROVIDERS,
@@ -71,6 +74,7 @@ export type {
   ProviderSettings,
 } from './types/providerSettings.js';
 export {
+  PROVIDER_IDS,
   PROVIDER_META,
   DEFAULT_MODELS,
   PROVIDER_ID_TO_OPENCODE,

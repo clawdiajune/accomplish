@@ -53,7 +53,7 @@ import {
   hasReadyProvider,
   getConnectedProviderIds,
 } from '../storage/repositories/providerSettings.js';
-import { SecureStorage } from '../internal/classes/SecureStorage.js';
+import { SecureStorage } from '../storage/secure-storage.js';
 import type { StorageAPI, StorageOptions } from '../types/storage.js';
 
 export function createStorage(options: StorageOptions = {}): StorageAPI {

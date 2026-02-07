@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { API_KEY_PROVIDERS } from '../common/types/provider.js';
 import type { ApiKeyProvider } from '../common/types/provider.js';
 
 /**
@@ -187,29 +188,10 @@ export class SecureStorage {
   }
 
   async getAllApiKeys(): Promise<Record<ApiKeyProvider, string | null>> {
-    const providers: ApiKeyProvider[] = [
-      'anthropic',
-      'openai',
-      'openrouter',
-      'google',
-      'xai',
-      'deepseek',
-      'moonshot',
-      'zai',
-      'azure-foundry',
-      'custom',
-      'bedrock',
-      'litellm',
-      'minimax',
-      'lmstudio',
-      'elevenlabs',
-    ];
-
     const result: Record<string, string | null> = {};
-    for (const provider of providers) {
+    for (const provider of API_KEY_PROVIDERS) {
       result[provider] = this.getApiKey(provider);
     }
-
     return result as Record<ApiKeyProvider, string | null>;
   }
 

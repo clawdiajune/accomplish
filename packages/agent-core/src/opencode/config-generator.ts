@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import type { ProviderId } from '../common/types/providerSettings.js';
 import type { Skill } from '../common/types/skills.js';
+import { BASE_OPENCODE_PROVIDERS } from './config-builder.js';
 
 export const ACCOMPLISH_AGENT_NAME = 'accomplish';
 
@@ -466,11 +467,7 @@ Use empty array [] if no skills apply to your task.
   if (customEnabledProviders) {
     enabledProviders = [...new Set([...customEnabledProviders, ...Object.keys(providerConfig)])];
   } else {
-    const baseProviders = [
-      'anthropic', 'openai', 'openrouter', 'google', 'xai',
-      'deepseek', 'moonshot', 'zai-coding-plan', 'amazon-bedrock', 'minimax'
-    ];
-    enabledProviders = [...new Set([...baseProviders, ...Object.keys(providerConfig)])];
+    enabledProviders = [...new Set([...BASE_OPENCODE_PROVIDERS, ...Object.keys(providerConfig)])];
   }
 
   const config: OpenCodeConfigFile = {

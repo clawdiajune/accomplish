@@ -10,7 +10,7 @@
  */
 
 import { fetchWithTimeout } from '../../utils/fetch.js';
-import type { SecureStorage } from './SecureStorage.js';
+import type { SecureStorage } from '../../storage/secure-storage.js';
 
 const ELEVENLABS_API_TIMEOUT_MS = 30000;
 const DEFAULT_ELEVENLABS_STT_MODEL_ID = 'scribe_v2';

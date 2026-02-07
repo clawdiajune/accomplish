@@ -21,6 +21,16 @@ import {
 } from '../storage/repositories/index.js';
 
 /**
+ * Base set of OpenCode CLI provider names that are always enabled.
+ * These use OpenCode-namespace names (e.g. 'zai-coding-plan', 'amazon-bedrock'),
+ * not internal ProviderId values.
+ */
+export const BASE_OPENCODE_PROVIDERS = [
+  'anthropic', 'openai', 'openrouter', 'google', 'xai',
+  'deepseek', 'moonshot', 'zai-coding-plan', 'amazon-bedrock', 'minimax',
+] as const;
+
+/**
  * Paths required for config generation (Electron-specific resolution stays in desktop)
  */
 export interface ConfigPaths {
@@ -121,17 +131,16 @@ export async function buildProviderConfigs(
   const activeModel = getActiveProviderModel();
   const providerConfigs: ProviderConfig[] = [];
 
-  const baseProviders = ['anthropic', 'openai', 'openrouter', 'google', 'xai', 'deepseek', 'moonshot', 'zai-coding-plan', 'amazon-bedrock', 'minimax'];
-  let enabledProviders = baseProviders;
+  let enabledProviders = [...BASE_OPENCODE_PROVIDERS] as string[];
 
   if (connectedIds.length > 0) {
     const mappedProviders = connectedIds.map(id => PROVIDER_ID_TO_OPENCODE[id]);
-    enabledProviders = [...new Set([...baseProviders, ...mappedProviders])];
+    enabledProviders = [...new Set([...BASE_OPENCODE_PROVIDERS, ...mappedProviders])];
     console.log('[OpenCode Config Builder] Using connected providers:', mappedProviders);
   } else {
     const ollamaConfig = getOllamaConfig();
     if (ollamaConfig?.enabled) {
-      enabledProviders = [...baseProviders, 'ollama'];
+      enabledProviders = [...BASE_OPENCODE_PROVIDERS, 'ollama'];
     }
   }
 

@@ -1,6 +1,8 @@
+import type { ApiKeyProvider } from './provider.js';
+
 export interface ApiKeyConfig {
   id: string;
-  provider: 'anthropic' | 'openai' | 'openrouter' | 'google' | 'xai' | 'deepseek' | 'moonshot' | 'zai' | 'azure-foundry' | 'custom' | 'bedrock';
+  provider: ApiKeyProvider;
   label?: string;
   keyPrefix?: string;
   isActive: boolean;
