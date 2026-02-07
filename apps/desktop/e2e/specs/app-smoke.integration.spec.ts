@@ -41,7 +41,7 @@ function createPermissionPoller(execution: ExecutionPage) {
   };
 }
 
-test.describe('App Smoke Test', () => {
+test.describe('AppSmokeTest', () => {
   test('full pipeline: submit prompt, auto-allow permissions, verify completion', async ({ window }) => {
     const home = new HomePage(window);
     const execution = new ExecutionPage(window);
