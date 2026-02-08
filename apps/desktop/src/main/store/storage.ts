@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import path from 'path';
 import { createStorage, type StorageAPI } from '@accomplish_ai/agent-core';
+// Deep import for legacy migration only — getDatabase is intentionally not part of StorageAPI
 import { getDatabase as coreGetDatabase } from '@accomplish_ai/agent-core/storage/database';
 import type { Database } from 'better-sqlite3';
 import { importLegacyElectronStoreData } from './electronStoreImport';
@@ -46,12 +47,4 @@ export function closeStorage(): void {
     _storage.close();
     _storage = null;
   }
-}
-
-/**
- * Close the existing storage and re-initialize from scratch.
- */
-export function resetStorage(): void {
-  closeStorage();
-  initializeStorage();
 }

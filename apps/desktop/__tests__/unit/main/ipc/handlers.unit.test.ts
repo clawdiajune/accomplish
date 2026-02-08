@@ -2052,6 +2052,6 @@ describe('IPC Handlers Integration', () => {
   // Note: Callback execution tests for onStatusChange, onDebug, onError, onComplete
   // are complex to set up due to vitest mock hoisting for webContents.send.
   // The callback logic is exercised through the task lifecycle tests above.
-  // The utility functions (extractScreenshots, sanitizeToolOutput, toTaskMessage)
+  // The utility functions (extractScreenshots, sanitizeToolOutput)
   // are tested in handlers-utils.unit.test.ts as pure function tests.
 });
