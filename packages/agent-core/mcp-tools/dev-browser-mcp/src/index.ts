@@ -23,7 +23,6 @@ import {
   closePage,
   getFullPageName,
   getBrowser,
-  getCachedServerMode,
   getConnectionMode,
 } from './connection.js';
 
