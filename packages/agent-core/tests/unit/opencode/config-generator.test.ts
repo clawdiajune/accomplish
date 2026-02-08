@@ -8,6 +8,7 @@ import {
   ACCOMPLISH_AGENT_NAME,
   ConfigGeneratorOptions,
   ProviderConfig,
+  BrowserConfig,
 } from '../../../src/opencode/config-generator.js';
 
 describe('ConfigGenerator', () => {
@@ -493,6 +494,102 @@ describe('ConfigGenerator', () => {
 
       expect(result.systemPrompt).toContain('AskUserQuestion');
       expect(result.systemPrompt).toContain('user CANNOT see your text output');
+    });
+  });
+
+  describe('browser config option', () => {
+    const baseOptions: ConfigGeneratorOptions = {
+      platform: 'darwin',
+      mcpToolsPath: '',
+      isPackaged: false,
+      userDataPath: '',
+    };
+
+    function makeOptions(overrides: Partial<ConfigGeneratorOptions> = {}): ConfigGeneratorOptions {
+      return {
+        ...baseOptions,
+        mcpToolsPath,
+        userDataPath,
+        ...overrides,
+      };
+    }
+
+    it('should register dev-browser-mcp by default (managed mode)', () => {
+      const result = generateConfig(makeOptions());
+
+      expect(result.mcpServers['dev-browser-mcp']).toBeDefined();
+      expect(result.mcpServers['dev-browser-mcp'].enabled).toBe(true);
+    });
+
+    it('should register dev-browser-mcp when browser mode is managed', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'managed' } }));
+
+      expect(result.mcpServers['dev-browser-mcp']).toBeDefined();
+      expect(result.mcpServers['dev-browser-mcp'].enabled).toBe(true);
+    });
+
+    it('should omit dev-browser-mcp when browser mode is none', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'none' } }));
+
+      expect(result.mcpServers['dev-browser-mcp']).toBeUndefined();
+      expect(result.config.mcp?.['dev-browser-mcp']).toBeUndefined();
+    });
+
+    it('should pass CDP_ENDPOINT env to dev-browser-mcp in direct mode', () => {
+      const browser: BrowserConfig = {
+        mode: 'direct',
+        cdpEndpoint: 'http://remote:9222',
+      };
+      const result = generateConfig(makeOptions({ browser }));
+
+      const mcpConfig = result.mcpServers['dev-browser-mcp'];
+      expect(mcpConfig).toBeDefined();
+      expect(mcpConfig.environment?.CDP_ENDPOINT).toBe('http://remote:9222');
+    });
+
+    it('should pass CDP_SECRET env when cdpHeaders includes X-CDP-Secret', () => {
+      const browser: BrowserConfig = {
+        mode: 'direct',
+        cdpEndpoint: 'http://remote:9222',
+        cdpHeaders: { 'X-CDP-Secret': 'test-secret' },
+      };
+      const result = generateConfig(makeOptions({ browser }));
+
+      const mcpConfig = result.mcpServers['dev-browser-mcp'];
+      expect(mcpConfig).toBeDefined();
+      expect(mcpConfig.environment?.CDP_SECRET).toBe('test-secret');
+    });
+
+    it('should not include environment on dev-browser-mcp in managed mode', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'managed' } }));
+
+      const mcpConfig = result.mcpServers['dev-browser-mcp'];
+      expect(mcpConfig).toBeDefined();
+      expect(mcpConfig.environment).toBeUndefined();
+    });
+
+    it('should strip browser identity from prompt when mode is none', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'none' } }));
+
+      expect(result.systemPrompt).toContain('task automation assistant');
+      expect(result.systemPrompt).not.toContain('browser automation assistant');
+    });
+
+    it('should keep browser identity in prompt for managed mode', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'managed' } }));
+
+      expect(result.systemPrompt).toContain('browser automation assistant');
+      expect(result.systemPrompt).not.toContain('task automation assistant');
+    });
+
+    it('should keep browser identity in prompt for direct mode', () => {
+      const browser: BrowserConfig = {
+        mode: 'direct',
+        cdpEndpoint: 'ws://remote:9222',
+      };
+      const result = generateConfig(makeOptions({ browser }));
+
+      expect(result.systemPrompt).toContain('browser automation assistant');
     });
   });
 });

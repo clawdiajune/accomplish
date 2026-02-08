@@ -5,6 +5,17 @@ import type { Skill } from '../common/types/skills.js';
 
 export const ACCOMPLISH_AGENT_NAME = 'accomplish';
 
+export interface BrowserConfig {
+  /** 'managed' = dev-browser HTTP server (default), 'direct' = connect to CDP endpoint, 'none' = no browser */
+  mode: 'managed' | 'direct' | 'none';
+  /** For 'direct': the CDP endpoint URL */
+  cdpEndpoint?: string;
+  /** For 'direct': auth headers (e.g. { 'X-CDP-Secret': '...' }) */
+  cdpHeaders?: Record<string, string>;
+  /** For 'managed': run headless */
+  headless?: boolean;
+}
+
 export interface ConfigGeneratorOptions {
   platform: NodeJS.Platform;
   mcpToolsPath: string;
@@ -26,6 +37,8 @@ export interface ConfigGeneratorOptions {
   model?: string;
   smallModel?: string;
   enabledProviders?: string[];
+  /** Browser configuration. Defaults to { mode: 'managed' } */
+  browser?: BrowserConfig;
 }
 
 export interface ProviderConfig {
@@ -412,20 +425,6 @@ Use empty array [] if no skills apply to your task.
       },
       timeout: 30000,
     },
-    'dev-browser-mcp': {
-      type: 'local',
-      command: resolveMcpCommand(
-        tsxCommand,
-        mcpToolsPath,
-        'dev-browser-mcp',
-        'src/index.ts',
-        'dist/index.mjs',
-        isPackaged,
-        nodePath
-      ),
-      enabled: true,
-      timeout: 30000,
-    },
     'complete-task': {
       type: 'local',
       command: resolveMcpCommand(
@@ -455,6 +454,48 @@ Use empty array [] if no skills apply to your task.
       timeout: 30000,
     },
   };
+
+  // Conditionally register dev-browser-mcp based on browser config
+  const browserConfig = options.browser ?? { mode: 'managed' };
+
+  if (browserConfig.mode !== 'none') {
+    const browserEnv: Record<string, string> = {};
+
+    if (browserConfig.mode === 'direct') {
+      if (browserConfig.cdpEndpoint) {
+        browserEnv.CDP_ENDPOINT = browserConfig.cdpEndpoint;
+      }
+      if (browserConfig.cdpHeaders) {
+        for (const [key, value] of Object.entries(browserConfig.cdpHeaders)) {
+          if (key === 'X-CDP-Secret') {
+            browserEnv.CDP_SECRET = value;
+          }
+        }
+      }
+    }
+
+    mcpServers['dev-browser-mcp'] = {
+      type: 'local',
+      command: resolveMcpCommand(
+        tsxCommand, mcpToolsPath, 'dev-browser-mcp',
+        'src/index.ts', 'dist/index.mjs', isPackaged, nodePath
+      ),
+      enabled: true,
+      ...(Object.keys(browserEnv).length > 0 && { environment: browserEnv }),
+      timeout: 30000,
+    };
+  }
+
+  // Strip browser-specific identity and instructions when browser is disabled
+  if (browserConfig.mode === 'none') {
+    systemPrompt = systemPrompt
+      .replace('You are Accomplish, a browser automation assistant.', 'You are Accomplish, a task automation assistant.')
+      .replace(/- \*\*Browser Automation\*\*:.*\n/, '')
+      .replace(/- \*\*NEVER use shell commands.*browser_\* MCP tools\.\n/, '')
+      .replace(/- For multi-step browser workflows.*\n/, '')
+      .replace(/- \*\*For collecting data from multiple pages.*browser_batch_actions\`.*\n/, '')
+      .replace(/\*\*BROWSER ACTION VERBOSITY[\s\S]*?Example bad narration \(too terse\):\n"Done\." or "Navigated\." or "Clicked\."\n/, '');
+  }
 
   const providerConfig: Record<string, Omit<ProviderConfig, 'id'>> = {};
   for (const provider of providerConfigs) {
