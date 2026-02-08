@@ -22,7 +22,6 @@ import {
   listPages,
   closePage,
   getFullPageName,
-  getBrowser,
   getConnectionMode,
 } from './connection.js';
 
