@@ -568,11 +568,17 @@ describe('ConfigGenerator', () => {
       expect(mcpConfig.environment).toBeUndefined();
     });
 
-    it('should strip browser identity from prompt when mode is none', () => {
+    it('should strip all browser references from prompt when mode is none', () => {
       const result = generateConfig(makeOptions({ browser: { mode: 'none' } }));
 
       expect(result.systemPrompt).toContain('task automation assistant');
       expect(result.systemPrompt).not.toContain('browser automation assistant');
+      expect(result.systemPrompt).not.toContain('browser_sequence');
+      expect(result.systemPrompt).not.toContain('browser_batch_actions');
+      expect(result.systemPrompt).not.toContain('browser_script');
+      expect(result.systemPrompt).not.toContain('browser_* MCP tools');
+      expect(result.systemPrompt).not.toContain('BROWSER ACTION VERBOSITY');
+      expect(result.systemPrompt).not.toContain('Browser Automation');
     });
 
     it('should keep browser identity in prompt for managed mode', () => {
