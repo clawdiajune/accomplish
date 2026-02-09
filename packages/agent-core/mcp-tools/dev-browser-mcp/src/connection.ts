@@ -4,15 +4,15 @@ import { chromium, type Browser, type Page } from 'playwright';
 // Types
 // ---------------------------------------------------------------------------
 
-export type ConnectionMode = 'managed' | 'direct';
+export type ConnectionMode = 'builtin' | 'remote';
 
 export interface ConnectionConfig {
   mode: ConnectionMode;
-  /** For 'managed': the dev-browser HTTP server URL (e.g. http://localhost:9224) */
+  /** For 'builtin': the dev-browser HTTP server URL (e.g. http://localhost:9224) */
   devBrowserUrl?: string;
-  /** For 'direct': the CDP endpoint URL (e.g. http://localhost:9222 or ws://...) */
+  /** For 'remote': the CDP endpoint URL (e.g. http://localhost:9222 or ws://...) */
   cdpEndpoint?: string;
-  /** For 'direct': optional headers for CDP connection (e.g. auth) */
+  /** For 'remote': optional headers for CDP connection (e.g. auth) */
   cdpHeaders?: Record<string, string>;
   /** Task ID for page name isolation */
   taskId: string;
@@ -51,7 +51,7 @@ export function configure(cfg: ConnectionConfig): void {
 
 /**
  * Detect config from environment variables.
- * CDP_ENDPOINT -> direct mode, else -> managed mode.
+ * CDP_ENDPOINT -> remote mode, else -> builtin mode.
  */
 export function configureFromEnv(): ConnectionConfig {
   const cdpEndpoint = process.env.CDP_ENDPOINT;
@@ -62,10 +62,10 @@ export function configureFromEnv(): ConnectionConfig {
     if (process.env.CDP_SECRET) {
       headers['X-CDP-Secret'] = process.env.CDP_SECRET;
     }
-    config = { mode: 'direct', cdpEndpoint, cdpHeaders: headers, taskId };
+    config = { mode: 'remote', cdpEndpoint, cdpHeaders: headers, taskId };
   } else {
     const port = parseInt(process.env.DEV_BROWSER_PORT || '9224', 10);
-    config = { mode: 'managed', devBrowserUrl: `http://localhost:${port}`, taskId };
+    config = { mode: 'builtin', devBrowserUrl: `http://localhost:${port}`, taskId };
   }
 
   return config;
@@ -82,10 +82,10 @@ export async function ensureConnected(): Promise<Browser> {
 
   connectingPromise = (async () => {
     try {
-      if (config.mode === 'direct') {
-        browser = await connectDirect();
+      if (config.mode === 'remote') {
+        browser = await connectRemote();
       } else {
-        browser = await connectManaged();
+        browser = await connectBuiltin();
       }
       return browser;
     } finally {
@@ -102,24 +102,24 @@ export function getFullPageName(pageName?: string): string {
 }
 
 export async function getPage(pageName?: string): Promise<Page> {
-  if (config.mode === 'direct') {
-    return getPageDirect(pageName);
+  if (config.mode === 'remote') {
+    return getPageRemote(pageName);
   }
-  return getPageManaged(pageName);
+  return getPageBuiltin(pageName);
 }
 
 export async function listPages(): Promise<string[]> {
-  if (config.mode === 'direct') {
-    return listPagesDirect();
+  if (config.mode === 'remote') {
+    return listPagesRemote();
   }
-  return listPagesManaged();
+  return listPagesBuiltin();
 }
 
 export async function closePage(pageName: string): Promise<boolean> {
-  if (config.mode === 'direct') {
-    return closePageDirect(pageName);
+  if (config.mode === 'remote') {
+    return closePageRemote(pageName);
   }
-  return closePageManaged(pageName);
+  return closePageBuiltin(pageName);
 }
 
 export function resetConnection(): void {
@@ -130,7 +130,7 @@ export function resetConnection(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Managed mode (existing behavior -- talks to dev-browser HTTP server)
+// Builtin mode (existing behavior -- talks to dev-browser HTTP server)
 // ---------------------------------------------------------------------------
 
 async function fetchWithRetry(
@@ -160,7 +160,7 @@ async function fetchWithRetry(
   throw lastError || new Error('fetchWithRetry failed');
 }
 
-async function connectManaged(): Promise<Browser> {
+async function connectBuiltin(): Promise<Browser> {
   const res = await fetchWithRetry(config.devBrowserUrl!);
   if (!res.ok) {
     throw new Error(`Server returned ${res.status}: ${await res.text()}`);
@@ -170,7 +170,7 @@ async function connectManaged(): Promise<Browser> {
   return chromium.connectOverCDP(info.wsEndpoint);
 }
 
-async function getPageManaged(pageName?: string): Promise<Page> {
+async function getPageBuiltin(pageName?: string): Promise<Page> {
   const fullName = getFullPageName(pageName);
 
   const res = await fetchWithRetry(`${config.devBrowserUrl}/pages`, {
@@ -208,7 +208,7 @@ async function getPageManaged(pageName?: string): Promise<Page> {
   return page;
 }
 
-async function listPagesManaged(): Promise<string[]> {
+async function listPagesBuiltin(): Promise<string[]> {
   const res = await fetchWithRetry(`${config.devBrowserUrl}/pages`);
   const data = await res.json() as { pages: string[] };
   const taskPrefix = `${config.taskId}-`;
@@ -217,7 +217,7 @@ async function listPagesManaged(): Promise<string[]> {
     .map((name: string) => name.substring(taskPrefix.length));
 }
 
-async function closePageManaged(pageName: string): Promise<boolean> {
+async function closePageBuiltin(pageName: string): Promise<boolean> {
   const fullName = getFullPageName(pageName);
   const res = await fetchWithRetry(`${config.devBrowserUrl}/pages/${encodeURIComponent(fullName)}`, {
     method: 'DELETE',
@@ -251,20 +251,20 @@ async function findPageByTargetId(b: Browser, targetId: string): Promise<Page | 
 }
 
 // ---------------------------------------------------------------------------
-// Direct mode (new -- connects to any CDP endpoint, manages pages locally)
+// Remote mode (new -- connects to any CDP endpoint, manages pages locally)
 // ---------------------------------------------------------------------------
 
-async function connectDirect(): Promise<Browser> {
+async function connectRemote(): Promise<Browser> {
   const endpoint = config.cdpEndpoint!;
   const options: { headers?: Record<string, string> } = {};
   if (config.cdpHeaders && Object.keys(config.cdpHeaders).length > 0) {
     options.headers = config.cdpHeaders;
   }
-  cachedServerMode = 'direct';
+  cachedServerMode = 'remote';
   return chromium.connectOverCDP(endpoint, options);
 }
 
-async function getPageDirect(pageName?: string): Promise<Page> {
+async function getPageRemote(pageName?: string): Promise<Page> {
   const fullName = getFullPageName(pageName);
 
   // Return existing page from local registry
@@ -290,7 +290,7 @@ async function getPageDirect(pageName?: string): Promise<Page> {
   return page;
 }
 
-function listPagesDirect(): Promise<string[]> {
+function listPagesRemote(): Promise<string[]> {
   const taskPrefix = `${config.taskId}-`;
   const pages = Array.from(localPageRegistry.keys())
     .filter(name => name.startsWith(taskPrefix))
@@ -302,7 +302,7 @@ function listPagesDirect(): Promise<string[]> {
   return Promise.resolve(pages);
 }
 
-function closePageDirect(pageName: string): Promise<boolean> {
+function closePageRemote(pageName: string): Promise<boolean> {
   const fullName = getFullPageName(pageName);
   const page = localPageRegistry.get(fullName);
   if (!page) return Promise.resolve(false);

@@ -1,7 +1,7 @@
 /**
- * Integration tests: verify all browser_* tools work with direct CDP mode.
+ * Integration tests: verify all browser_* tools work with remote CDP mode.
  *
- * These tests launch a real headless Chromium browser, connect via direct CDP
+ * These tests launch a real headless Chromium browser, connect via remote CDP
  * (no dev-browser HTTP server), and exercise each browser tool function.
  *
  * Run: npx vitest run src/integration.test.ts
@@ -99,7 +99,7 @@ beforeAll(async () => {
   cdpEndpoint = result.wsEndpoint;
 
   configure({
-    mode: 'direct',
+    mode: 'remote',
     cdpEndpoint,
     taskId: 'integration-test',
   });
@@ -112,11 +112,11 @@ afterAll(async () => {
   }
 });
 
-describe('Direct CDP Integration', () => {
+describe('Remote CDP Integration', () => {
 
   // --- Connection ---
 
-  it('connects to headless browser via direct CDP', async () => {
+  it('connects to headless browser via remote CDP', async () => {
     const browser = await ensureConnected();
     expect(browser.isConnected()).toBe(true);
   });

@@ -514,15 +514,15 @@ describe('ConfigGenerator', () => {
       };
     }
 
-    it('should register dev-browser-mcp by default (managed mode)', () => {
+    it('should register dev-browser-mcp by default (builtin mode)', () => {
       const result = generateConfig(makeOptions());
 
       expect(result.mcpServers['dev-browser-mcp']).toBeDefined();
       expect(result.mcpServers['dev-browser-mcp'].enabled).toBe(true);
     });
 
-    it('should register dev-browser-mcp when browser mode is managed', () => {
-      const result = generateConfig(makeOptions({ browser: { mode: 'managed' } }));
+    it('should register dev-browser-mcp when browser mode is builtin', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'builtin' } }));
 
       expect(result.mcpServers['dev-browser-mcp']).toBeDefined();
       expect(result.mcpServers['dev-browser-mcp'].enabled).toBe(true);
@@ -535,9 +535,9 @@ describe('ConfigGenerator', () => {
       expect(result.config.mcp?.['dev-browser-mcp']).toBeUndefined();
     });
 
-    it('should pass CDP_ENDPOINT env to dev-browser-mcp in direct mode', () => {
+    it('should pass CDP_ENDPOINT env to dev-browser-mcp in remote mode', () => {
       const browser: BrowserConfig = {
-        mode: 'direct',
+        mode: 'remote',
         cdpEndpoint: 'http://remote:9222',
       };
       const result = generateConfig(makeOptions({ browser }));
@@ -549,7 +549,7 @@ describe('ConfigGenerator', () => {
 
     it('should pass CDP_SECRET env when cdpHeaders includes X-CDP-Secret', () => {
       const browser: BrowserConfig = {
-        mode: 'direct',
+        mode: 'remote',
         cdpEndpoint: 'http://remote:9222',
         cdpHeaders: { 'X-CDP-Secret': 'test-secret' },
       };
@@ -560,8 +560,8 @@ describe('ConfigGenerator', () => {
       expect(mcpConfig.environment?.CDP_SECRET).toBe('test-secret');
     });
 
-    it('should not include environment on dev-browser-mcp in managed mode', () => {
-      const result = generateConfig(makeOptions({ browser: { mode: 'managed' } }));
+    it('should not include environment on dev-browser-mcp in builtin mode', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'builtin' } }));
 
       const mcpConfig = result.mcpServers['dev-browser-mcp'];
       expect(mcpConfig).toBeDefined();
@@ -581,16 +581,16 @@ describe('ConfigGenerator', () => {
       expect(result.systemPrompt).not.toContain('Browser Automation');
     });
 
-    it('should keep browser identity in prompt for managed mode', () => {
-      const result = generateConfig(makeOptions({ browser: { mode: 'managed' } }));
+    it('should keep browser identity in prompt for builtin mode', () => {
+      const result = generateConfig(makeOptions({ browser: { mode: 'builtin' } }));
 
       expect(result.systemPrompt).toContain('browser automation assistant');
       expect(result.systemPrompt).not.toContain('task automation assistant');
     });
 
-    it('should keep browser identity in prompt for direct mode', () => {
+    it('should keep browser identity in prompt for remote mode', () => {
       const browser: BrowserConfig = {
-        mode: 'direct',
+        mode: 'remote',
         cdpEndpoint: 'ws://remote:9222',
       };
       const result = generateConfig(makeOptions({ browser }));

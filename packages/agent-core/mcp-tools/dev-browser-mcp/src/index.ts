@@ -202,7 +202,7 @@ let glowInitialized = false;
 async function ensureConnected() {
   const b = await ensureConnectedRaw();
 
-  if (!glowInitialized && getConnectionMode() === 'managed') {
+  if (!glowInitialized && getConnectionMode() === 'builtin') {
     glowInitialized = true;
     for (const context of b.contexts()) {
       context.on('page', async (page) => {

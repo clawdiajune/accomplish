@@ -12,7 +12,7 @@ npm install
 
 The server supports two connection modes, determined by the `CDP_ENDPOINT` environment variable.
 
-### Managed mode (default)
+### Builtin mode (default)
 
 Connects to the dev-browser HTTP server, which manages browser lifecycle and page routing. This is how the Accomplish desktop app uses it.
 
@@ -24,7 +24,7 @@ npx tsx src/index.ts
 DEV_BROWSER_PORT=5555 npx tsx src/index.ts
 ```
 
-### Direct CDP mode
+### Remote CDP mode
 
 Connects directly to any Chrome DevTools Protocol endpoint — no dev-browser HTTP server needed. Pages are managed in a local in-memory registry.
 
@@ -40,12 +40,12 @@ CDP_ENDPOINT=ws://remote-browser:9222 CDP_SECRET=my-token npx tsx src/index.ts
 
 | Variable | Mode | Description |
 |----------|------|-------------|
-| `CDP_ENDPOINT` | direct | CDP endpoint URL (http or ws). When set, enables direct mode. |
-| `CDP_SECRET` | direct | Sent as `X-CDP-Secret` header for authenticated endpoints. |
-| `DEV_BROWSER_PORT` | managed | Port for the dev-browser HTTP server (default: `9224`). |
+| `CDP_ENDPOINT` | remote | CDP endpoint URL (http or ws). When set, enables remote mode. |
+| `CDP_SECRET` | remote | Sent as `X-CDP-Secret` header for authenticated endpoints. |
+| `DEV_BROWSER_PORT` | builtin | Port for the dev-browser HTTP server (default: `9224`). |
 | `ACCOMPLISH_TASK_ID` | both | Task ID for page name isolation (default: `default`). |
 
-### Launching a headless browser for direct mode
+### Launching a headless browser for remote mode
 
 ```bash
 # Start headless Chromium with a CDP port

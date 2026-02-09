@@ -114,12 +114,12 @@ The config generator accepts a `browser` option to control how the agent connect
 import { generateConfig, type BrowserConfig } from '@accomplish_ai/agent-core';
 
 // Default — uses the dev-browser HTTP server
-generateConfig({ browser: { mode: 'managed' } });
+generateConfig({ browser: { mode: 'builtin' } });
 
-// Direct CDP — connect to any Chrome DevTools Protocol endpoint
+// Remote CDP — connect to any Chrome DevTools Protocol endpoint
 generateConfig({
   browser: {
-    mode: 'direct',
+    mode: 'remote',
     cdpEndpoint: 'http://localhost:9222',
     cdpHeaders: { 'X-CDP-Secret': 'token' },  // optional auth
   },
@@ -131,8 +131,8 @@ generateConfig({ browser: { mode: 'none' } });
 
 | Mode | Description |
 |------|-------------|
-| `managed` | Default. Connects via the dev-browser HTTP server (used by the desktop app). |
-| `direct` | Connects directly to a CDP endpoint (headless Chromium, remote browser, etc.). |
+| `builtin` | Default. Connects via the dev-browser HTTP server (used by the desktop app). |
+| `remote` | Connects directly to a CDP endpoint (headless Chromium, remote browser, etc.). |
 | `none` | Disables browser tools. Strips browser identity from the agent's system prompt. |
 
 ## Sub-path Exports

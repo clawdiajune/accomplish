@@ -6,13 +6,13 @@ import type { Skill } from '../common/types/skills.js';
 export const ACCOMPLISH_AGENT_NAME = 'accomplish';
 
 export interface BrowserConfig {
-  /** 'managed' = dev-browser HTTP server (default), 'direct' = connect to CDP endpoint, 'none' = no browser */
-  mode: 'managed' | 'direct' | 'none';
-  /** For 'direct': the CDP endpoint URL */
+  /** 'builtin' = dev-browser HTTP server (default), 'remote' = connect to CDP endpoint, 'none' = no browser */
+  mode: 'builtin' | 'remote' | 'none';
+  /** For 'remote': the CDP endpoint URL */
   cdpEndpoint?: string;
-  /** For 'direct': auth headers (e.g. { 'X-CDP-Secret': '...' }) */
+  /** For 'remote': auth headers (e.g. { 'X-CDP-Secret': '...' }) */
   cdpHeaders?: Record<string, string>;
-  /** For 'managed': run headless */
+  /** For 'builtin': run headless */
   headless?: boolean;
 }
 
@@ -37,7 +37,7 @@ export interface ConfigGeneratorOptions {
   model?: string;
   smallModel?: string;
   enabledProviders?: string[];
-  /** Browser configuration. Defaults to { mode: 'managed' } */
+  /** Browser configuration. Defaults to { mode: 'builtin' } */
   browser?: BrowserConfig;
 }
 
@@ -435,12 +435,12 @@ Use empty array [] if no skills apply to your task.
   };
 
   // Conditionally register dev-browser-mcp based on browser config
-  const browserConfig = options.browser ?? { mode: 'managed' };
+  const browserConfig = options.browser ?? { mode: 'builtin' };
 
   if (browserConfig.mode !== 'none') {
     const browserEnv: Record<string, string> = {};
 
-    if (browserConfig.mode === 'direct') {
+    if (browserConfig.mode === 'remote') {
       if (browserConfig.cdpEndpoint) {
         browserEnv.CDP_ENDPOINT = browserConfig.cdpEndpoint;
       }
