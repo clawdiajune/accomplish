@@ -150,7 +150,9 @@ export function ClassicProviderForm({
         // Fetch models dynamically if provider has a models endpoint
         let fetchedModels: Array<{ id: string; name: string }> | undefined;
         if (providerConfig?.modelsEndpoint) {
-          const fetchResult = await accomplish.fetchProviderModels(providerId);
+          const fetchResult = await accomplish.fetchProviderModels(providerId, {
+            baseUrl: isOpenAI ? openAiBaseUrl.trim() || undefined : undefined,
+          });
           if (fetchResult.success && fetchResult.models) {
             fetchedModels = fetchResult.models;
           }

@@ -35,7 +35,7 @@ function buildRequest(
     headers['x-api-key'] = apiKey;
   } else if (config.authStyle === 'query-param') {
     const separator = url.includes('?') ? '&' : '?';
-    url = `${url}${separator}key=${apiKey}`;
+    url = `${url}${separator}key=${encodeURIComponent(apiKey)}`;
   }
 
   if (config.extraHeaders) {
