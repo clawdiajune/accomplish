@@ -149,6 +149,11 @@ export {
 } from './providers/bedrock.js';
 
 export {
+  validateVertexCredentials,
+  fetchVertexModels,
+} from './providers/vertex.js';
+
+export {
   validateAzureFoundry,
   testAzureFoundryConnection,
 } from './providers/azure-foundry.js';
@@ -290,6 +295,7 @@ export type {
   ConnectionStatus,
   ApiKeyCredentials,
   BedrockProviderCredentials,
+  VertexProviderCredentials,
   OllamaCredentials,
   OpenRouterCredentials,
   LiteLLMCredentials,
@@ -320,6 +326,9 @@ export type {
   BedrockAccessKeyCredentials,
   BedrockProfileCredentials,
   BedrockApiKeyCredentials,
+  VertexCredentials,
+  VertexServiceAccountCredentials,
+  VertexAdcCredentials,
 } from './common/types/auth.js';
 
 // OpenCode message types

@@ -1,0 +1,182 @@
+import { execSync } from 'child_process';
+import {
+  validateVertexCredentials,
+  fetchVertexModels,
+} from '@accomplish_ai/agent-core';
+import type { VertexCredentials } from '@accomplish_ai/agent-core';
+import { storeApiKey, getApiKey } from '../store/secureStorage';
+import { normalizeIpcError } from '../ipc/validation';
+import type { IpcHandler } from '../ipc/types';
+import type { IpcMainInvokeEvent } from 'electron';
+
+export function registerVertexHandlers(handle: IpcHandler): void {
+  handle('vertex:validate', async (_event: IpcMainInvokeEvent, credentials: string) => {
+    console.log('[Vertex] Validation requested');
+    return validateVertexCredentials(credentials);
+  });
+
+  handle('vertex:fetch-models', async (_event: IpcMainInvokeEvent, credentialsJson: string) => {
+    try {
+      const credentials = JSON.parse(credentialsJson) as VertexCredentials;
+      const result = await fetchVertexModels(credentials);
+      if (!result.success && result.error) {
+        return { success: false, error: normalizeIpcError(result.error), models: [] };
+      }
+      return result;
+    } catch (error) {
+      console.error('[Vertex] Failed to fetch models:', error);
+      return { success: false, error: normalizeIpcError(error), models: [] };
+    }
+  });
+
+  handle('vertex:save', async (_event: IpcMainInvokeEvent, credentials: string) => {
+    const parsed = JSON.parse(credentials) as VertexCredentials;
+
+    if (!parsed.projectId?.trim()) {
+      throw new Error('Project ID is required');
+    }
+    if (!parsed.location?.trim()) {
+      throw new Error('Location is required');
+    }
+
+    if (parsed.authType === 'serviceAccount') {
+      if (!parsed.serviceAccountJson?.trim()) {
+        throw new Error('Service account JSON key is required');
+      }
+    }
+
+    storeApiKey('vertex', credentials);
+
+    const label = parsed.authType === 'serviceAccount' ? 'Service Account' : 'Application Default Credentials';
+    const keyPrefix = `${parsed.projectId} (${parsed.location})`;
+
+    return {
+      id: 'local-vertex',
+      provider: 'vertex',
+      label,
+      keyPrefix,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+  });
+
+  handle('vertex:get-credentials', async (_event: IpcMainInvokeEvent) => {
+    const stored = getApiKey('vertex');
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return null;
+    }
+  });
+
+  handle('vertex:detect-project', async (_event: IpcMainInvokeEvent) => {
+    // 1. Check environment variables
+    const envProject =
+      process.env.GOOGLE_CLOUD_PROJECT ||
+      process.env.CLOUDSDK_CORE_PROJECT ||
+      process.env.GCLOUD_PROJECT;
+    if (envProject) {
+      return { success: true, projectId: envProject };
+    }
+
+    // 2. Try gcloud config
+    try {
+      const project = execSync('gcloud config get-value project', {
+        timeout: 10000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+      if (project) {
+        return { success: true, projectId: project };
+      }
+    } catch {
+      // gcloud not available or not configured, continue to next method
+    }
+
+    // 3. Use ADC token to query Resource Manager API for projects
+    try {
+      const token = execSync('gcloud auth application-default print-access-token', {
+        timeout: 10000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+
+      if (token) {
+        const response = await fetch(
+          'https://cloudresourcemanager.googleapis.com/v1/projects?filter=lifecycleState%3DACTIVE&pageSize=1',
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(10000),
+          }
+        );
+        if (response.ok) {
+          const data = (await response.json()) as { projects?: Array<{ projectId: string }> };
+          const firstProject = data.projects?.[0]?.projectId;
+          if (firstProject) {
+            return { success: true, projectId: firstProject };
+          }
+        }
+      }
+    } catch {
+      // ADC token or API call failed
+    }
+
+    return { success: false, projectId: null };
+  });
+
+  handle('vertex:list-projects', async (_event: IpcMainInvokeEvent) => {
+    try {
+      const token = execSync('gcloud auth application-default print-access-token', {
+        timeout: 10000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+
+      if (!token) {
+        return { success: false, projects: [], error: 'No ADC token available' };
+      }
+
+      const projects: Array<{ projectId: string; name: string }> = [];
+      let pageToken: string | undefined;
+
+      // Fetch up to 3 pages (each page has up to 100 projects)
+      for (let page = 0; page < 3; page++) {
+        const url = new URL('https://cloudresourcemanager.googleapis.com/v1/projects');
+        url.searchParams.set('filter', 'lifecycleState:ACTIVE');
+        url.searchParams.set('pageSize', '100');
+        if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+        const response = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          return { success: false, projects: [], error: `Failed to list projects (${response.status}): ${errorText}` };
+        }
+
+        const data = (await response.json()) as {
+          projects?: Array<{ projectId: string; name: string }>;
+          nextPageToken?: string;
+        };
+
+        if (data.projects) {
+          for (const p of data.projects) {
+            projects.push({ projectId: p.projectId, name: p.name || p.projectId });
+          }
+        }
+
+        if (!data.nextPageToken) break;
+        pageToken = data.nextPageToken;
+      }
+
+      projects.sort((a, b) => a.projectId.localeCompare(b.projectId));
+      return { success: true, projects };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, projects: [], error: message };
+    }
+  });
+}

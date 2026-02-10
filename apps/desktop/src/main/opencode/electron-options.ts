@@ -17,9 +17,9 @@ import {
   type EnvironmentConfig,
 } from '@accomplish_ai/agent-core';
 import { getModelDisplayName } from '@accomplish_ai/agent-core';
-import type { AzureFoundryCredentials, BedrockCredentials } from '@accomplish_ai/agent-core';
+import type { AzureFoundryCredentials, BedrockCredentials, VertexCredentials } from '@accomplish_ai/agent-core';
 import { getStorage } from '../store/storage';
-import { getAllApiKeys, getBedrockCredentials } from '../store/secureStorage';
+import { getAllApiKeys, getBedrockCredentials, getApiKey } from '../store/secureStorage';
 import { generateOpenCodeConfig, getMcpToolsPath, syncApiKeysToOpenCodeAuth } from './config-generator';
 import { getExtendedNodePath } from '../utils/system-path';
 import { getBundledNodePaths, logBundledNodeInfo } from '../utils/bundled-node';
@@ -129,10 +129,30 @@ export async function buildEnvironment(taskId: string): Promise<NodeJS.ProcessEn
     ollamaHost = selectedModel.baseUrl;
   }
 
+  // Handle Vertex AI credentials
+  let vertexCredentials: VertexCredentials | undefined;
+  let vertexServiceAccountKeyPath: string | undefined;
+  const vertexCredsJson = getApiKey('vertex');
+  if (vertexCredsJson) {
+    try {
+      const parsed = JSON.parse(vertexCredsJson) as VertexCredentials;
+      vertexCredentials = parsed;
+      if (parsed.authType === 'serviceAccount' && parsed.serviceAccountJson) {
+        const userDataPath = app.getPath('userData');
+        vertexServiceAccountKeyPath = path.join(userDataPath, 'vertex-sa-key.json');
+        fs.writeFileSync(vertexServiceAccountKeyPath, parsed.serviceAccountJson, { mode: 0o600 });
+      }
+    } catch {
+      console.warn('[OpenCode CLI] Failed to parse Vertex credentials');
+    }
+  }
+
   // Build environment configuration
   const envConfig: EnvironmentConfig = {
     apiKeys,
     bedrockCredentials: bedrockCredentials || undefined,
+    vertexCredentials,
+    vertexServiceAccountKeyPath,
     bundledNodeBinPath: bundledNode?.binDir,
     taskId: taskId || undefined,
     openAiBaseUrl: configuredOpenAiBaseUrl || undefined,
