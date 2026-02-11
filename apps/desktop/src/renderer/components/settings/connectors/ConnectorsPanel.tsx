@@ -118,8 +118,8 @@ export function ConnectorsPanel() {
     <div className="flex flex-col gap-4">
       {/* Description */}
       <p className="text-sm text-muted-foreground">
-        Connect external MCP servers that support OAuth authentication. These
-        servers will be available during task execution.
+        Connect remote MCP servers using OAuth. Only servers that support the
+        OAuth 2.0 authorization flow are currently supported.
       </p>
 
       {/* Add form */}
