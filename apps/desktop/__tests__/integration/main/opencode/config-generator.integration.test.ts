@@ -216,9 +216,6 @@ Use AskUserQuestion tool for user interaction.`,
   })),
   clearAppSettings: vi.fn(),
 
-  // Storage factory (imported by store/storage.ts in the module graph)
-  createStorage: vi.fn(() => ({})),
-
   // Constants needed by config-generator
   PERMISSION_API_PORT: 9226,
   QUESTION_API_PORT: 9227,
