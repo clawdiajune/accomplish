@@ -113,6 +113,7 @@ export interface OllamaModelInfo {
   id: string;
   displayName: string;
   size: number;
+  toolSupport?: 'supported' | 'unsupported' | 'unknown';
 }
 
 export interface OllamaConfig {
