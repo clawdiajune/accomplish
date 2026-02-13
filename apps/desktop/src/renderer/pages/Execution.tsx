@@ -8,6 +8,7 @@ import { getAccomplish } from '../lib/accomplish';
 import { springs } from '../lib/animations';
 import type { TaskMessage } from '@accomplish_ai/agent-core/common';
 import { hasAnyReadyProvider } from '@accomplish_ai/agent-core/common';
+import { PROMPT_DEFAULT_MAX_LENGTH } from '@accomplish_ai/agent-core';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
@@ -182,6 +183,7 @@ export default function ExecutionPage() {
   const accomplish = getAccomplish();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [followUp, setFollowUp] = useState('');
+  const isFollowUpOverLimit = followUp.length > PROMPT_DEFAULT_MAX_LENGTH;
   const followUpInputRef = useRef<HTMLTextAreaElement>(null);
   const [taskRunCount, setTaskRunCount] = useState(0);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
@@ -1396,15 +1398,22 @@ export default function ExecutionPage() {
                   onOpenSettings={handleOpenSpeechSettings}
                   size="md"
                 />
-                <button
-                  type="button"
-                  onClick={handleFollowUp}
-                  disabled={!followUp.trim() || isLoading || speechInput.isRecording}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Send"
-                >
-                  <CornerDownLeft className="h-4 w-4" />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Send"
+                      onClick={handleFollowUp}
+                      disabled={!followUp.trim() || isLoading || speechInput.isRecording || isFollowUpOverLimit}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <CornerDownLeft className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span>{isFollowUpOverLimit ? `Message exceeds maximum length of ${PROMPT_DEFAULT_MAX_LENGTH.toLocaleString()} characters` : 'Send'}</span>
+                  </TooltipContent>
+                </Tooltip>
                 </div>
               </div>
             </div>

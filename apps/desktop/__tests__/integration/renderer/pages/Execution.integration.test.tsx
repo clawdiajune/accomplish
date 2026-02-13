@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { Task, TaskStatus, TaskMessage, PermissionRequest } from '@accomplish_ai/agent-core';
+import { PROMPT_DEFAULT_MAX_LENGTH } from '@accomplish_ai/agent-core';
 
 // Create mock functions
 const mockLoadTaskById = vi.fn();
@@ -1391,6 +1392,84 @@ describe('Execution Page Integration', () => {
       await waitFor(() => {
         expect(mockSendFollowUp).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('follow-up message length limit', () => {
+    it('should disable send button when follow-up exceeds max length', () => {
+      // Arrange
+      const task = createMockTask('task-123', 'Done', 'completed');
+      task.sessionId = 'session-abc';
+      mockStoreState.currentTask = task;
+
+      renderWithRouter('task-123');
+
+      // Act
+      const input = screen.getByTestId('execution-follow-up-input');
+      const oversizedValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH + 1);
+      fireEvent.change(input, { target: { value: oversizedValue } });
+
+      // Assert
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      expect(sendButton).toBeDisabled();
+    });
+
+    it('should not disable send button when follow-up is at max length', () => {
+      // Arrange
+      const task = createMockTask('task-123', 'Done', 'completed');
+      task.sessionId = 'session-abc';
+      mockStoreState.currentTask = task;
+
+      renderWithRouter('task-123');
+
+      // Act
+      const input = screen.getByTestId('execution-follow-up-input');
+      const exactLimitValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH);
+      fireEvent.change(input, { target: { value: exactLimitValue } });
+
+      // Assert
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      expect(sendButton).not.toBeDisabled();
+    });
+
+    it('should not call sendFollowUp when submitting oversized follow-up', async () => {
+      // Arrange
+      const task = createMockTask('task-123', 'Done', 'completed');
+      task.sessionId = 'session-abc';
+      mockStoreState.currentTask = task;
+
+      renderWithRouter('task-123');
+
+      // Act
+      const input = screen.getByTestId('execution-follow-up-input');
+      const oversizedValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH + 1);
+      fireEvent.change(input, { target: { value: oversizedValue } });
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      fireEvent.click(sendButton);
+
+      // Assert
+      await waitFor(() => {
+        expect(mockSendFollowUp).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should wrap send button in a tooltip trigger', () => {
+      // Arrange
+      const task = createMockTask('task-123', 'Done', 'completed');
+      task.sessionId = 'session-abc';
+      mockStoreState.currentTask = task;
+
+      renderWithRouter('task-123');
+
+      // Act
+      const input = screen.getByTestId('execution-follow-up-input');
+      const oversizedValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH + 1);
+      fireEvent.change(input, { target: { value: oversizedValue } });
+
+      // Assert - button has tooltip trigger data attribute from Radix
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      expect(sendButton).toHaveAttribute('data-slot', 'tooltip-trigger');
     });
   });
 });

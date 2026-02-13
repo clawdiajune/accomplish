@@ -6,8 +6,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { PROMPT_DEFAULT_MAX_LENGTH } from '@accomplish_ai/agent-core';
 import TaskInputBar from '@/components/landing/TaskInputBar';
 
 // Helper to render with Router context (required for PlusMenu -> CreateSkillModal -> useNavigate)
@@ -483,6 +484,89 @@ describe('TaskInputBar Integration', () => {
       // Assert
       const submitButton = screen.getByRole('button', { name: /submit/i });
       expect(submitButton).toBeDisabled();
+    });
+  });
+
+  describe('message length limit', () => {
+    it('should disable submit button when message exceeds max length', () => {
+      // Arrange
+      const onChange = vi.fn();
+      const onSubmit = vi.fn();
+      const oversizedValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH + 1);
+
+      // Act
+      renderWithRouter(
+        <TaskInputBar
+          value={oversizedValue}
+          onChange={onChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Assert
+      const submitButton = screen.getByTestId('task-input-submit');
+      expect(submitButton).toBeDisabled();
+    });
+
+    it('should not disable submit button when message is at max length', () => {
+      // Arrange
+      const onChange = vi.fn();
+      const onSubmit = vi.fn();
+      const exactLimitValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH);
+
+      // Act
+      renderWithRouter(
+        <TaskInputBar
+          value={exactLimitValue}
+          onChange={onChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Assert
+      const submitButton = screen.getByTestId('task-input-submit');
+      expect(submitButton).not.toBeDisabled();
+    });
+
+    it('should not call onSubmit when clicking submit with oversized message', () => {
+      // Arrange
+      const onChange = vi.fn();
+      const onSubmit = vi.fn();
+      const oversizedValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH + 1);
+
+      renderWithRouter(
+        <TaskInputBar
+          value={oversizedValue}
+          onChange={onChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Act
+      const submitButton = screen.getByTestId('task-input-submit');
+      fireEvent.click(submitButton);
+
+      // Assert
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('should wrap submit button in a tooltip trigger', () => {
+      // Arrange
+      const onChange = vi.fn();
+      const onSubmit = vi.fn();
+      const oversizedValue = 'a'.repeat(PROMPT_DEFAULT_MAX_LENGTH + 1);
+
+      renderWithRouter(
+        <TaskInputBar
+          value={oversizedValue}
+          onChange={onChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Assert - button has tooltip trigger data attribute from Radix
+      const submitButton = screen.getByTestId('task-input-submit');
+      expect(submitButton).toHaveAttribute('data-slot', 'tooltip-trigger');
     });
   });
 

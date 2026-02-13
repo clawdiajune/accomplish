@@ -3,9 +3,11 @@
 import { useRef, useEffect } from 'react';
 import { getAccomplish } from '../../lib/accomplish';
 import { CornerDownLeft, Loader2, AlertCircle } from 'lucide-react';
+import { PROMPT_DEFAULT_MAX_LENGTH } from '@accomplish_ai/agent-core';
 import { useSpeechInput } from '../../hooks/useSpeechInput';
 import { SpeechInputButton } from '../ui/SpeechInputButton';
 import { ModelIndicator } from '../ui/ModelIndicator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PlusMenu } from './PlusMenu';
 
@@ -57,6 +59,7 @@ export default function TaskInputBar({
   autoSubmitOnTranscription = true,
 }: TaskInputBarProps) {
   const isDisabled = disabled || isLoading;
+  const isOverLimit = value.length > PROMPT_DEFAULT_MAX_LENGTH;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingAutoSubmitRef = useRef<string | null>(null);
   const accomplish = getAccomplish();
@@ -210,27 +213,34 @@ export default function TaskInputBar({
           />
 
           {/* Submit button */}
-          <button
-            data-testid="task-input-submit"
-            type="button"
-            onClick={() => {
-              accomplish.logEvent({
-                level: 'info',
-                message: 'Task input submit clicked',
-                context: { prompt: value },
-              });
-              onSubmit();
-            }}
-            disabled={!value.trim() || isDisabled || speechInput.isRecording}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all duration-200 ease-accomplish hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-            title="Submit"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CornerDownLeft className="h-4 w-4" />
-            )}
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                data-testid="task-input-submit"
+                type="button"
+                aria-label="Submit"
+                onClick={() => {
+                  accomplish.logEvent({
+                    level: 'info',
+                    message: 'Task input submit clicked',
+                    context: { prompt: value },
+                  });
+                  onSubmit();
+                }}
+                disabled={!value.trim() || isDisabled || speechInput.isRecording || isOverLimit}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all duration-200 ease-accomplish hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CornerDownLeft className="h-4 w-4" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span>{isOverLimit ? `Message exceeds maximum length of ${PROMPT_DEFAULT_MAX_LENGTH.toLocaleString()} characters` : 'Submit'}</span>
+            </TooltipContent>
+          </Tooltip>
           </div>
         </div>
       </div>
