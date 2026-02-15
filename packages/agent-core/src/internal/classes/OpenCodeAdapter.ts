@@ -397,6 +397,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   }
 
   private handleMessage(message: OpenCodeMessage): void {
+    if (this.hasCompleted) {
+      return;
+    }
+
     console.log('[OpenCode Adapter] Handling message type:', message.type);
 
     switch (message.type) {
@@ -571,6 +575,14 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     if (toolName === 'complete_task' || toolName.endsWith('_complete_task')) {
       this.completionEnforcer.handleCompleteTaskDetection(toolInput);
+      if (this.completionEnforcer.shouldComplete() && !this.hasCompleted) {
+        this.hasCompleted = true;
+        this.emit('complete', {
+          status: 'success',
+          sessionId: sessionID || this.currentSessionId || undefined,
+        });
+        return;
+      }
     }
 
     if (toolName === 'todowrite' || toolName.endsWith('_todowrite')) {
