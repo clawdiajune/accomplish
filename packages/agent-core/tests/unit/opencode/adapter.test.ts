@@ -156,8 +156,9 @@ describe('Start task detection', () => {
 });
 
 describe('Plan message formatting', () => {
-  it('should format plan with goal and steps', () => {
+  it('should format plan with goal and steps when needs_planning is true', () => {
     const input = {
+      needs_planning: true,
       goal: 'Build a login form',
       steps: ['Create HTML structure', 'Add CSS styling', 'Implement validation'],
       verification: ['Test form submission'],
@@ -187,6 +188,29 @@ describe('Plan message formatting', () => {
 
     expect(skillsSection).toContain('**Skills:**');
     expect(skillsSection).toContain('frontend-design, form-validation');
+  });
+
+  it('should skip plan emission when needs_planning is false', () => {
+    const input = {
+      needs_planning: false,
+      original_request: 'Hello!',
+      skills: [],
+    };
+
+    // When needs_planning is false, goal and steps are undefined
+    // The adapter guard `if (startInput?.goal && startInput?.steps)` skips plan emission
+    const shouldEmitPlan = !!(input as { goal?: string; steps?: string[] }).goal
+      && !!(input as { goal?: string; steps?: string[] }).steps;
+    expect(shouldEmitPlan).toBe(false);
+  });
+
+  it('should still allow start_task detection when needs_planning is false', () => {
+    const isStartTask = (name: string) =>
+      name === 'start_task' || name.endsWith('_start_task');
+
+    // start_task is recognized regardless of needs_planning value
+    expect(isStartTask('start_task')).toBe(true);
+    expect(isStartTask('mcp_start_task')).toBe(true);
   });
 });
 

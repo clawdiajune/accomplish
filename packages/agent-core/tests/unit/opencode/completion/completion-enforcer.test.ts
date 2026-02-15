@@ -187,6 +187,30 @@ describe('CompletionEnforcer', () => {
       );
     });
 
+    it('should return "complete" when only helper tools were used', () => {
+      enforcer.markToolsUsed(false);
+
+      const result = enforcer.handleStepFinish('stop');
+
+      expect(result).toBe('complete');
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'skip_continuation',
+        'No tools used and no complete_task called — treating as conversational response'
+      );
+    });
+
+    it('should return "pending" for structured tasks even when no tools were used in this turn', () => {
+      enforcer.markStructuredTaskStarted();
+
+      const result = enforcer.handleStepFinish('stop');
+
+      expect(result).toBe('pending');
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'continuation',
+        'Scheduled continuation prompt (attempt 1)'
+      );
+    });
+
     it('should return "complete" after complete_task with success', () => {
       enforcer.handleCompleteTaskDetection({
         status: 'success',
@@ -279,6 +303,20 @@ describe('CompletionEnforcer', () => {
       expect(prompt).toContain('You called complete_task with status="partial"');
       expect(prompt).toContain('## REQUIRED: Create a Continuation Plan');
       expect(prompt).not.toContain('rejected');
+    });
+
+    it('should keep continuing after a text-only continuation turn when tools were used earlier', async () => {
+      enforcer.markToolsUsed();
+      expect(enforcer.handleStepFinish('stop')).toBe('pending');
+
+      await enforcer.handleProcessExit(0);
+
+      const result = enforcer.handleStepFinish('stop');
+      expect(result).toBe('pending');
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'continuation',
+        'Scheduled continuation prompt (attempt 2)'
+      );
     });
 
     it('should call onComplete when no pending actions', async () => {

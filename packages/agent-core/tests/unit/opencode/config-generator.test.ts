@@ -438,7 +438,7 @@ describe('ConfigGenerator', () => {
       expect(result.systemPrompt).toContain('Accomplish');
     });
 
-    it('should include task planning behavior', () => {
+    it('should include task planning behavior with needs_planning', () => {
       const options: ConfigGeneratorOptions = {
         platform: 'darwin',
         mcpToolsPath,
@@ -449,8 +449,22 @@ describe('ConfigGenerator', () => {
       const result = generateConfig(options);
 
       expect(result.systemPrompt).toContain('start_task');
-      expect(result.systemPrompt).toContain('todowrite');
+      expect(result.systemPrompt).toContain('needs_planning');
       expect(result.systemPrompt).toContain('complete_task');
+    });
+
+    it('should include needs_planning true and false examples', () => {
+      const options: ConfigGeneratorOptions = {
+        platform: 'darwin',
+        mcpToolsPath,
+        userDataPath,
+        isPackaged: false,
+      };
+
+      const result = generateConfig(options);
+
+      expect(result.systemPrompt).toContain('"needs_planning": true');
+      expect(result.systemPrompt).toContain('"needs_planning": false');
     });
 
     it('should include filesystem rules', () => {

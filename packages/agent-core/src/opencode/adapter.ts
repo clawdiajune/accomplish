@@ -531,6 +531,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     if (this.isStartTaskTool(toolName)) {
       this.startTaskCalled = true;
+      this.completionEnforcer.markStructuredTaskStarted();
       const startInput = toolInput as StartTaskInput;
       if (startInput?.goal && startInput?.steps) {
         this.emitPlanMessage(startInput, sessionID || this.currentSessionId || '');
@@ -564,7 +565,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       }
     }
 
-    this.completionEnforcer.markToolsUsed();
+    this.completionEnforcer.markToolsUsed(!this.isNonTaskContinuationTool(toolName));
 
     if (toolName === 'complete_task' || toolName.endsWith('_complete_task')) {
       this.completionEnforcer.handleCompleteTaskDetection(toolInput);
@@ -729,6 +730,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     return false;
   }
 
+  private isNonTaskContinuationTool(toolName: string): boolean {
+    return toolName === 'skill' || toolName.endsWith('_skill');
+  }
+
   private emitPlanMessage(input: StartTaskInput, sessionId: string): void {
     const verificationSection = input.verification?.length
       ? `\n\n**Verification:**\n${input.verification.map((v, i) => `${i + 1}. ${v}`).join('\n')}`
@@ -736,7 +741,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     const skillsSection = input.skills?.length
       ? `\n\n**Skills:** ${input.skills.join(', ')}`
       : '';
-    const planText = `**Plan:**\n\n**Goal:** ${input.goal}\n\n**Steps:**\n${input.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${verificationSection}${skillsSection}`;
+    const planText = `**Plan:**\n\n**Goal:** ${input.goal}\n\n**Steps:**\n${input.steps?.map((s, i) => `${i + 1}. ${s}`).join('\n') ?? ''}${verificationSection}${skillsSection}`;
 
     const syntheticMessage: OpenCodeMessage = {
       type: 'text',
@@ -791,9 +796,10 @@ interface AskUserQuestionInput {
 
 interface StartTaskInput {
   original_request: string;
-  goal: string;
-  steps: string[];
-  verification: string[];
+  needs_planning: boolean;
+  goal?: string;
+  steps?: string[];
+  verification?: string[];
   skills: string[];
 }
 
