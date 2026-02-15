@@ -4,6 +4,7 @@
 
 fix(agent-core): prevent infinite completion loop on incomplete todos
 
-Add circuit breaker (max 3 todo-based downgrades before accepting success),
-transparent feedback via getIncompleteTodosPrompt, and reduce default
-maxContinuationAttempts from 50/20 to 10.
+Integrate incomplete-todos feedback into getPartialContinuationPrompt so the
+agent knows exactly which items are unresolved and to call todowrite. Reduce
+default maxContinuationAttempts from 50 to 10 as a safety net. Add
+continuationPrompt to debug logging for observability.

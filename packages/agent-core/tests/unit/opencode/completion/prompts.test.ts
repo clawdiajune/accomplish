@@ -98,7 +98,7 @@ describe('Completion Prompts', () => {
   });
 
   describe('getPartialContinuationPrompt with incompleteTodos', () => {
-    it('should include incomplete todos section when provided', () => {
+    it('should return a focused todowrite prompt when incompleteTodos provided', () => {
       const prompt = getPartialContinuationPrompt(
         'Remaining',
         'Original',
@@ -106,12 +106,26 @@ describe('Completion Prompts', () => {
         '- Task 1\n- Task 2'
       );
 
-      expect(prompt).toContain('## Incomplete Todos');
+      expect(prompt).toContain('complete_task call was rejected');
       expect(prompt).toContain('- Task 1');
       expect(prompt).toContain('- Task 2');
       expect(prompt).toContain('todowrite');
       expect(prompt).toContain('"completed"');
       expect(prompt).toContain('"cancelled"');
+    });
+
+    it('should not include generic continuation plan when incompleteTodos provided', () => {
+      const prompt = getPartialContinuationPrompt(
+        'Remaining',
+        'Original',
+        'Completed',
+        '- Task 1'
+      );
+
+      expect(prompt).not.toContain('## REQUIRED: Create a Continuation Plan');
+      expect(prompt).not.toContain('## Original Request');
+      expect(prompt).not.toContain('## What You Completed');
+      expect(prompt).not.toContain('## What You Said Remains');
     });
 
     it('should not include incomplete todos section when not provided', () => {
@@ -121,8 +135,8 @@ describe('Completion Prompts', () => {
         'Completed'
       );
 
-      expect(prompt).not.toContain('## Incomplete Todos');
-      expect(prompt).not.toContain('todowrite');
+      expect(prompt).not.toContain('rejected');
+      expect(prompt).toContain('## REQUIRED: Create a Continuation Plan');
     });
   });
 });

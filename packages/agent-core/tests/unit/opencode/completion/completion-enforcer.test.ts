@@ -244,7 +244,7 @@ describe('CompletionEnforcer', () => {
       );
     });
 
-    it('should include incomplete todos section when downgrade was triggered by todos', async () => {
+    it('should use focused todowrite prompt when downgrade was triggered by todos', async () => {
       const todos: TodoItem[] = [
         { id: '1', content: 'Write tests', status: 'pending', priority: 'high' },
       ];
@@ -259,13 +259,13 @@ describe('CompletionEnforcer', () => {
       await enforcer.handleProcessExit(0);
 
       const prompt = onStartContinuationMock.mock.calls[0][0] as string;
-      expect(prompt).toContain('You called complete_task with status="partial"');
-      expect(prompt).toContain('## Incomplete Todos');
+      expect(prompt).toContain('complete_task call was rejected');
       expect(prompt).toContain('Write tests');
       expect(prompt).toContain('todowrite');
+      expect(prompt).not.toContain('## REQUIRED: Create a Continuation Plan');
     });
 
-    it('should not include incomplete todos section when agent genuinely says partial', async () => {
+    it('should use generic partial prompt when agent genuinely says partial', async () => {
       enforcer.handleCompleteTaskDetection({
         status: 'partial',
         summary: 'Partial done',
@@ -277,7 +277,8 @@ describe('CompletionEnforcer', () => {
 
       const prompt = onStartContinuationMock.mock.calls[0][0] as string;
       expect(prompt).toContain('You called complete_task with status="partial"');
-      expect(prompt).not.toContain('## Incomplete Todos');
+      expect(prompt).toContain('## REQUIRED: Create a Continuation Plan');
+      expect(prompt).not.toContain('rejected');
     });
 
     it('should call onComplete when no pending actions', async () => {
