@@ -15,9 +15,10 @@ Keep working if there's more to do.`;
 export function getPartialContinuationPrompt(
   remainingWork: string,
   originalRequest: string,
-  completedSummary: string
+  completedSummary: string,
+  incompleteTodos?: string
 ): string {
-  return `You called complete_task with status="partial" but the task is not done yet.
+  let prompt = `You called complete_task with status="partial" but the task is not done yet.
 
 ## Original Request
 "${originalRequest}"
@@ -49,18 +50,21 @@ Before continuing, you MUST:
 - Do NOT call complete_task with "partial" again unless you hit an actual TECHNICAL blocker
 - If you hit a real blocker (login wall, CAPTCHA, rate limit, site error), use "blocked" status
 - "partial" is NOT an acceptable final status - keep working until the task is complete
-- Do NOT ask the user "would you like me to continue?" - just continue working
+- Do NOT ask the user "would you like me to continue?" - just continue working`;
 
-Now create your continuation plan and resume working on the remaining items.`;
-}
+  if (incompleteTodos) {
+    prompt += `
 
-export function getIncompleteTodosPrompt(
-  incompleteTodos: string
-): string {
-  return `STOP. Your complete_task was rejected because these todo items are still marked incomplete:
+## Incomplete Todos
+The following todo items are still marked incomplete:
 ${incompleteTodos}
 
-If you have NOT done the work yet, do it first.
-Then call todowrite to update each item: "completed" (if done) or "cancelled" (if not needed).
-After todowrite, call complete_task with status="success".`;
+You MUST call todowrite to update each item to "completed" (if done) or "cancelled" (if not needed) before calling complete_task.`;
+  }
+
+  prompt += `
+
+Now create your continuation plan and resume working on the remaining items.`;
+
+  return prompt;
 }

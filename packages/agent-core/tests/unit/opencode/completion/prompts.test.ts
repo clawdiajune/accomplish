@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   getContinuationPrompt,
   getPartialContinuationPrompt,
-  getIncompleteTodosPrompt,
 } from '../../../../src/opencode/completion/prompts.js';
 
 describe('Completion Prompts', () => {
@@ -98,38 +97,32 @@ describe('Completion Prompts', () => {
     });
   });
 
-  describe('getIncompleteTodosPrompt', () => {
-    it('should include incomplete todos', () => {
-      const incompleteTodos = '- Task 1\n- Task 2\n- Task 3';
-      const prompt = getIncompleteTodosPrompt(incompleteTodos);
+  describe('getPartialContinuationPrompt with incompleteTodos', () => {
+    it('should include incomplete todos section when provided', () => {
+      const prompt = getPartialContinuationPrompt(
+        'Remaining',
+        'Original',
+        'Completed',
+        '- Task 1\n- Task 2'
+      );
 
+      expect(prompt).toContain('## Incomplete Todos');
       expect(prompt).toContain('- Task 1');
       expect(prompt).toContain('- Task 2');
-      expect(prompt).toContain('- Task 3');
-    });
-
-    it('should mention todowrite tool for updating todos', () => {
-      const prompt = getIncompleteTodosPrompt('- Incomplete item');
-
       expect(prompt).toContain('todowrite');
-      expect(prompt).toContain('completed');
-      expect(prompt).toContain('cancelled');
+      expect(prompt).toContain('"completed"');
+      expect(prompt).toContain('"cancelled"');
     });
 
-    it('should instruct to call complete_task after todowrite', () => {
-      const prompt = getIncompleteTodosPrompt('- Item');
+    it('should not include incomplete todos section when not provided', () => {
+      const prompt = getPartialContinuationPrompt(
+        'Remaining',
+        'Original',
+        'Completed'
+      );
 
-      expect(prompt).toContain('call complete_task with status="success"');
-      expect(prompt).toContain('After todowrite');
-    });
-
-    it('should be direct and handle both done and not-done cases', () => {
-      const prompt = getIncompleteTodosPrompt('- Item');
-
-      expect(prompt).toContain('STOP');
-      expect(prompt).toContain('rejected');
-      expect(prompt).toContain('NOT done the work yet');
-      expect(prompt).toContain('call todowrite');
+      expect(prompt).not.toContain('## Incomplete Todos');
+      expect(prompt).not.toContain('todowrite');
     });
   });
 });

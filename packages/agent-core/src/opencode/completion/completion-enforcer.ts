@@ -1,5 +1,5 @@
 import { CompletionState, CompletionFlowState, CompleteTaskArgs } from './completion-state.js';
-import { getContinuationPrompt, getPartialContinuationPrompt, getIncompleteTodosPrompt } from './prompts.js';
+import { getContinuationPrompt, getPartialContinuationPrompt } from './prompts.js';
 import type { TodoItem } from '../../common/types/todo.js';
 
 export interface CompletionEnforcerCallbacks {
@@ -15,7 +15,6 @@ export class CompletionEnforcer {
   private callbacks: CompletionEnforcerCallbacks;
   private currentTodos: TodoItem[] = [];
   private toolsWereUsed: boolean = false;
-  private todoDowngradeTriggered: boolean = false;
 
   constructor(callbacks: CompletionEnforcerCallbacks, maxContinuationAttempts?: number) {
     this.callbacks = callbacks;
@@ -60,7 +59,6 @@ export class CompletionEnforcer {
         'Agent claimed success but has incomplete todos - downgrading to partial',
         { incompleteTodos: this.getIncompleteTodosSummary() }
       );
-      this.todoDowngradeTriggered = true;
       completeTaskArgs.status = 'partial';
       completeTaskArgs.remaining_work = this.getIncompleteTodosSummary();
     }
@@ -117,19 +115,12 @@ export class CompletionEnforcer {
     if (this.state.isPendingPartialContinuation() && exitCode === 0) {
       const args = this.state.getCompleteTaskArgs();
 
-      let prompt: string;
-      if (this.todoDowngradeTriggered) {
-        prompt = getIncompleteTodosPrompt(
-          args?.remaining_work || 'No remaining work specified'
-        );
-        this.todoDowngradeTriggered = false;
-      } else {
-        prompt = getPartialContinuationPrompt(
-          args?.remaining_work || 'No remaining work specified',
-          args?.original_request_summary || 'Unknown request',
-          args?.summary || 'No summary provided'
-        );
-      }
+      const prompt = getPartialContinuationPrompt(
+        args?.remaining_work || 'No remaining work specified',
+        args?.original_request_summary || 'Unknown request',
+        args?.summary || 'No summary provided',
+        this.hasIncompleteTodos() ? this.getIncompleteTodosSummary() : undefined
+      );
 
       const canContinue = this.state.startPartialContinuation();
 
@@ -178,7 +169,6 @@ export class CompletionEnforcer {
     this.state.reset();
     this.currentTodos = [];
     this.toolsWereUsed = false;
-    this.todoDowngradeTriggered = false;
   }
 
   private hasIncompleteTodos(): boolean {

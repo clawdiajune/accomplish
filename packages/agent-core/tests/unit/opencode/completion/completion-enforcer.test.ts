@@ -244,7 +244,7 @@ describe('CompletionEnforcer', () => {
       );
     });
 
-    it('should use incomplete todos prompt when downgrade was triggered by todos', async () => {
+    it('should include incomplete todos section when downgrade was triggered by todos', async () => {
       const todos: TodoItem[] = [
         { id: '1', content: 'Write tests', status: 'pending', priority: 'high' },
       ];
@@ -259,12 +259,13 @@ describe('CompletionEnforcer', () => {
       await enforcer.handleProcessExit(0);
 
       const prompt = onStartContinuationMock.mock.calls[0][0] as string;
-      expect(prompt).toContain('STOP. Your complete_task was rejected');
+      expect(prompt).toContain('You called complete_task with status="partial"');
+      expect(prompt).toContain('## Incomplete Todos');
       expect(prompt).toContain('Write tests');
       expect(prompt).toContain('todowrite');
     });
 
-    it('should use standard partial prompt when agent genuinely says partial', async () => {
+    it('should not include incomplete todos section when agent genuinely says partial', async () => {
       enforcer.handleCompleteTaskDetection({
         status: 'partial',
         summary: 'Partial done',
@@ -276,7 +277,7 @@ describe('CompletionEnforcer', () => {
 
       const prompt = onStartContinuationMock.mock.calls[0][0] as string;
       expect(prompt).toContain('You called complete_task with status="partial"');
-      expect(prompt).not.toContain('incomplete todos');
+      expect(prompt).not.toContain('## Incomplete Todos');
     });
 
     it('should call onComplete when no pending actions', async () => {
@@ -394,7 +395,6 @@ describe('CompletionEnforcer', () => {
       const maxAttempts = 3;
       const limitedEnforcer = new CompletionEnforcer(callbacks, maxAttempts);
 
-      // First attempt
       limitedEnforcer.markToolsUsed();
       limitedEnforcer.handleStepFinish('stop');
       await limitedEnforcer.handleProcessExit(0);
@@ -402,7 +402,6 @@ describe('CompletionEnforcer', () => {
       expect(limitedEnforcer.getContinuationAttempts()).toBe(1);
       expect(onStartContinuationMock).toHaveBeenCalledTimes(1);
 
-      // Second attempt
       limitedEnforcer.markToolsUsed();
       limitedEnforcer.handleStepFinish('stop');
       await limitedEnforcer.handleProcessExit(0);
@@ -410,7 +409,6 @@ describe('CompletionEnforcer', () => {
       expect(limitedEnforcer.getContinuationAttempts()).toBe(2);
       expect(onStartContinuationMock).toHaveBeenCalledTimes(2);
 
-      // Third attempt
       limitedEnforcer.markToolsUsed();
       limitedEnforcer.handleStepFinish('stop');
       await limitedEnforcer.handleProcessExit(0);
@@ -418,7 +416,7 @@ describe('CompletionEnforcer', () => {
       expect(limitedEnforcer.getContinuationAttempts()).toBe(3);
       expect(onStartContinuationMock).toHaveBeenCalledTimes(3);
 
-      // Fourth attempt - should hit max
+      // Exceeds maxAttempts — circuit breaker kicks in
       limitedEnforcer.markToolsUsed();
       const action = limitedEnforcer.handleStepFinish('stop');
 
