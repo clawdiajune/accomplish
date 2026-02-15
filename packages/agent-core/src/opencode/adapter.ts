@@ -567,9 +567,14 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.completionEnforcer.markToolsUsed();
 
     if (toolName === 'complete_task' || toolName.endsWith('_complete_task')) {
-      const isFirst = this.completionEnforcer.handleCompleteTaskDetection(toolInput);
-      if (isFirst && this.completionEnforcer.getState() === CompletionFlowState.DONE) {
-        const summary = (toolInput as { summary?: string })?.summary;
+      this.completionEnforcer.handleCompleteTaskDetection(toolInput);
+
+      // Emit the complete_task summary as a final assistant message
+      // so the UI displays the result regardless of model behavior.
+      // Only emit when state is DONE (not PARTIAL) to avoid duplicates
+      // during continuation retry loops.
+      if (this.completionEnforcer.getState() === CompletionFlowState.DONE) {
+        const summary = (toolInput as { summary?: string })?.summary?.trim();
         if (summary) {
           this.emitSummaryMessage(summary, sessionID || this.currentSessionId || '');
         }

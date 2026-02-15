@@ -5,7 +5,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { StreamParser } from './StreamParser.js';
 import { OpenCodeLogWatcher, createLogWatcher, OpenCodeLogError } from './OpenCodeLogWatcher.js';
-import { CompletionEnforcer, CompletionEnforcerCallbacks } from '../../opencode/completion/index.js';
+import { CompletionEnforcer, CompletionEnforcerCallbacks, CompletionFlowState } from '../../opencode/completion/index.js';
 import type { TaskConfig, Task, TaskMessage, TaskResult } from '../../common/types/task.js';
 import type { OpenCodeMessage } from '../../common/types/opencode.js';
 import type { PermissionRequest } from '../../common/types/permission.js';
@@ -478,6 +478,17 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         if (toolUseName === 'AskUserQuestion') {
           this.handleAskUserQuestion(toolUseInput as AskUserQuestionInput);
         }
+
+        // Emit the complete_task summary as a final assistant message
+        // AFTER the tool_use message, so it appears as the last bubble.
+        if (toolUseName === 'complete_task' || toolUseName.endsWith('_complete_task')) {
+          if (this.completionEnforcer.getState() === CompletionFlowState.DONE) {
+            const summary = (toolUseInput as { summary?: string })?.summary?.trim();
+            if (summary) {
+              this.emitSummaryMessage(summary, toolUseMessage.part.sessionID || this.currentSessionId || '');
+            }
+          }
+        }
         break;
 
       case 'tool_result':
@@ -753,6 +764,32 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     this.emit('message', syntheticMessage);
     console.log('[OpenCode Adapter] Emitted synthetic plan message');
+  }
+
+  private emitSummaryMessage(summary: string, sessionId: string): void {
+    const syntheticMessage: OpenCodeMessage = {
+      type: 'text',
+      timestamp: Date.now(),
+      sessionID: sessionId,
+      part: {
+        id: this.generateMessageId(),
+        sessionID: sessionId,
+        messageID: this.generateMessageId(),
+        type: 'text',
+        text: summary,
+      },
+    } as import('../../common/types/opencode.js').OpenCodeTextMessage;
+
+    const taskMessage: TaskMessage = {
+      id: this.generateMessageId(),
+      type: 'assistant',
+      content: summary,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.messages.push(taskMessage);
+    this.emit('message', syntheticMessage);
+    console.log('[OpenCode Adapter] Emitted synthetic summary message');
   }
 
   private getPlatformShell(): string {
