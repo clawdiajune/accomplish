@@ -5,7 +5,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { StreamParser } from './stream-parser.js';
 import { OpenCodeLogWatcher, createLogWatcher, OpenCodeLogError } from './log-watcher.js';
-import { CompletionEnforcer, CompletionEnforcerCallbacks } from './completion/index.js';
+import { CompletionEnforcer, CompletionEnforcerCallbacks, CompletionFlowState } from './completion/index.js';
 import type { TaskConfig, Task, TaskMessage, TaskResult } from '../common/types/task.js';
 import type { OpenCodeMessage } from '../common/types/opencode.js';
 import type { PermissionRequest } from '../common/types/permission.js';
@@ -567,7 +567,13 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.completionEnforcer.markToolsUsed();
 
     if (toolName === 'complete_task' || toolName.endsWith('_complete_task')) {
-      this.completionEnforcer.handleCompleteTaskDetection(toolInput);
+      const isFirst = this.completionEnforcer.handleCompleteTaskDetection(toolInput);
+      if (isFirst && this.completionEnforcer.getState() === CompletionFlowState.DONE) {
+        const summary = (toolInput as { summary?: string })?.summary;
+        if (summary) {
+          this.emitSummaryMessage(summary, sessionID || this.currentSessionId || '');
+        }
+      }
     }
 
     if (toolName === 'todowrite' || toolName.endsWith('_todowrite')) {
@@ -753,6 +759,32 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
 
     this.emit('message', syntheticMessage);
     console.log('[OpenCode Adapter] Emitted synthetic plan message');
+  }
+
+  private emitSummaryMessage(summary: string, sessionId: string): void {
+    const syntheticMessage: OpenCodeMessage = {
+      type: 'text',
+      timestamp: Date.now(),
+      sessionID: sessionId,
+      part: {
+        id: this.generateMessageId(),
+        sessionID: sessionId,
+        messageID: this.generateMessageId(),
+        type: 'text',
+        text: summary,
+      },
+    } as import('../common/types/opencode.js').OpenCodeTextMessage;
+
+    const taskMessage: TaskMessage = {
+      id: this.generateMessageId(),
+      type: 'assistant',
+      content: summary,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.messages.push(taskMessage);
+    this.emit('message', syntheticMessage);
+    console.log('[OpenCode Adapter] Emitted synthetic summary message');
   }
 
   private getPlatformShell(): string {

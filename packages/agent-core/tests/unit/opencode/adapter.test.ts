@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenCodeCliNotFoundError } from '../../../src/opencode/adapter.js';
+import { CompletionEnforcer, CompletionFlowState } from '../../../src/opencode/completion/index.js';
+import type { CompletionEnforcerCallbacks } from '../../../src/opencode/completion/index.js';
+import type { TaskMessage } from '../../../src/common/types/task.js';
+import type { OpenCodeTextMessage } from '../../../src/common/types/opencode.js';
 
 /**
  * Tests for OpenCodeAdapter module.
@@ -247,5 +251,200 @@ describe('AskUserQuestion handling', () => {
     expect(permissionRequest.question).toBe('Do you want to continue?');
     expect(permissionRequest.options?.length).toBe(2);
     expect(permissionRequest.multiSelect).toBe(false);
+  });
+});
+
+/**
+ * Tests for complete_task summary emission logic.
+ *
+ * These tests verify the behavioral contract:
+ * - When complete_task is detected for the first time AND resolves to DONE state,
+ *   a synthetic summary TaskMessage should be emitted.
+ * - No summary emitted for non-DONE states (e.g., partial/blocked).
+ * - No summary emitted when summary text is empty or undefined.
+ *
+ * We test the logic without instantiating OpenCodeAdapter (node-pty dependency)
+ * by exercising the CompletionEnforcer + message construction pattern directly.
+ */
+describe('complete_task summary emission', () => {
+  let enforcer: CompletionEnforcer;
+  let callbacks: CompletionEnforcerCallbacks;
+
+  beforeEach(() => {
+    callbacks = {
+      onStartContinuation: vi.fn().mockResolvedValue(undefined),
+      onComplete: vi.fn(),
+      onDebug: vi.fn(),
+    };
+    enforcer = new CompletionEnforcer(callbacks);
+
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Helper that mirrors the adapter's summary emission logic:
+   * build a synthetic OpenCodeTextMessage + TaskMessage from a summary string.
+   */
+  function buildSummaryMessages(summary: string, sessionId: string): {
+    openCodeMessage: OpenCodeTextMessage;
+    taskMessage: TaskMessage;
+  } {
+    const msgId = `msg_test_${Date.now()}`;
+    const openCodeMessage: OpenCodeTextMessage = {
+      type: 'text',
+      timestamp: Date.now(),
+      sessionID: sessionId,
+      part: {
+        id: msgId,
+        sessionID: sessionId,
+        messageID: msgId,
+        type: 'text',
+        text: summary,
+      },
+    };
+
+    const taskMessage: TaskMessage = {
+      id: msgId,
+      type: 'assistant',
+      content: summary,
+      timestamp: new Date().toISOString(),
+    };
+
+    return { openCodeMessage, taskMessage };
+  }
+
+  it('should emit summary TaskMessage when state is DONE', () => {
+    const toolInput = {
+      status: 'success',
+      summary: 'Successfully completed the login form with validation.',
+      original_request_summary: 'Build a login form',
+    };
+
+    // Simulate the adapter's complete_task detection
+    const isFirstCall = enforcer.handleCompleteTaskDetection(toolInput);
+    const state = enforcer.getState();
+
+    // Guard: first call returns true, state should be DONE
+    expect(isFirstCall).toBe(true);
+    expect(state).toBe(CompletionFlowState.DONE);
+
+    // The adapter would emit summary only when both conditions are met
+    const shouldEmitSummary = isFirstCall && state === CompletionFlowState.DONE && toolInput.summary;
+
+    expect(shouldEmitSummary).toBeTruthy();
+
+    // Verify the synthetic message can be constructed correctly
+    const { openCodeMessage, taskMessage } = buildSummaryMessages(
+      toolInput.summary,
+      'session_123'
+    );
+
+    expect(openCodeMessage.type).toBe('text');
+    expect(openCodeMessage.part.text).toBe(toolInput.summary);
+    expect(taskMessage.type).toBe('assistant');
+    expect(taskMessage.content).toBe(toolInput.summary);
+  });
+
+  it('should NOT emit summary when state is PARTIAL (not DONE)', () => {
+    // Set up incomplete todos so success gets downgraded to partial
+    enforcer.updateTodos([
+      { id: '1', content: 'Unfinished task', status: 'pending', priority: 'high' },
+    ]);
+
+    const toolInput = {
+      status: 'success',
+      summary: 'Claimed success but has incomplete todos',
+      original_request_summary: 'Test request',
+    };
+
+    const isFirstCall = enforcer.handleCompleteTaskDetection(toolInput);
+    const state = enforcer.getState();
+
+    // First call returns true, but state should be PARTIAL_CONTINUATION_PENDING (not DONE)
+    expect(isFirstCall).toBe(true);
+    expect(state).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+
+    const shouldEmitSummary = isFirstCall && state === CompletionFlowState.DONE && toolInput.summary;
+
+    expect(shouldEmitSummary).toBeFalsy();
+  });
+
+  it('should NOT emit summary when summary is empty string', () => {
+    const toolInput = {
+      status: 'success',
+      summary: '',
+      original_request_summary: 'Test request',
+    };
+
+    const isFirstCall = enforcer.handleCompleteTaskDetection(toolInput);
+    const state = enforcer.getState();
+
+    expect(isFirstCall).toBe(true);
+    expect(state).toBe(CompletionFlowState.DONE);
+
+    // Even though state is DONE and it's first call, empty summary should not emit
+    const shouldEmitSummary = isFirstCall && state === CompletionFlowState.DONE && toolInput.summary;
+
+    expect(shouldEmitSummary).toBeFalsy();
+  });
+
+  it('should NOT emit summary when summary is undefined', () => {
+    const toolInput = {
+      status: 'success',
+      original_request_summary: 'Test request',
+    };
+
+    const isFirstCall = enforcer.handleCompleteTaskDetection(toolInput);
+    const state = enforcer.getState();
+
+    expect(isFirstCall).toBe(true);
+    expect(state).toBe(CompletionFlowState.DONE);
+
+    // Extract summary the way the adapter does — from the raw toolInput
+    const summary = (toolInput as { summary?: string }).summary;
+    const shouldEmitSummary = isFirstCall && state === CompletionFlowState.DONE && summary;
+
+    expect(shouldEmitSummary).toBeFalsy();
+  });
+
+  it('should NOT emit summary on duplicate complete_task calls', () => {
+    const toolInput = {
+      status: 'success',
+      summary: 'Task completed successfully.',
+      original_request_summary: 'Test request',
+    };
+
+    // First call
+    const firstResult = enforcer.handleCompleteTaskDetection(toolInput);
+    expect(firstResult).toBe(true);
+
+    // Duplicate call - should return false
+    const secondResult = enforcer.handleCompleteTaskDetection(toolInput);
+    expect(secondResult).toBe(false);
+
+    const shouldEmitSummary = secondResult && enforcer.getState() === CompletionFlowState.DONE && toolInput.summary;
+    expect(shouldEmitSummary).toBeFalsy();
+  });
+
+  it('should NOT emit summary when state is BLOCKED', () => {
+    const toolInput = {
+      status: 'blocked',
+      summary: 'Cannot proceed - missing credentials.',
+      original_request_summary: 'Deploy application',
+    };
+
+    const isFirstCall = enforcer.handleCompleteTaskDetection(toolInput);
+    const state = enforcer.getState();
+
+    expect(isFirstCall).toBe(true);
+    expect(state).toBe(CompletionFlowState.BLOCKED);
+
+    const shouldEmitSummary = isFirstCall && state === CompletionFlowState.DONE && toolInput.summary;
+    expect(shouldEmitSummary).toBeFalsy();
   });
 });
