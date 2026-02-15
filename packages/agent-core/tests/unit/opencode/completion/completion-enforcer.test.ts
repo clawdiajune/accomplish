@@ -108,7 +108,7 @@ describe('CompletionEnforcer', () => {
 
       expect(onDebugMock).toHaveBeenCalledWith(
         'incomplete_todos',
-        'Agent claimed success but has incomplete todos - downgrading to partial',
+        'Agent claimed success but has incomplete todos - downgrading to partial (attempt 1/3)',
         expect.any(Object)
       );
 
@@ -129,6 +129,104 @@ describe('CompletionEnforcer', () => {
       });
 
       expect(enforcer.getState()).toBe(CompletionFlowState.DONE);
+    });
+
+    it('should accept success after repeated todo downgrades (circuit breaker)', async () => {
+      const todos: TodoItem[] = [
+        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
+      ];
+      enforcer.updateTodos(todos);
+
+      // Attempt 1: downgrade to partial
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+
+      // Continuation resets state to IDLE via handleProcessExit
+      await enforcer.handleProcessExit(0);
+      expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
+      // Should use incomplete todos prompt, not standard partial prompt
+      expect(onStartContinuationMock).toHaveBeenLastCalledWith(
+        expect.stringContaining('You called complete_task with status="success", but you have incomplete todos')
+      );
+
+      // Attempt 2: downgrade to partial
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+
+      await enforcer.handleProcessExit(0);
+      expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
+      expect(onStartContinuationMock).toHaveBeenLastCalledWith(
+        expect.stringContaining('attempt 2 of 3')
+      );
+
+      // Attempt 3: downgrade to partial
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+
+      await enforcer.handleProcessExit(0);
+      expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
+      expect(onStartContinuationMock).toHaveBeenLastCalledWith(
+        expect.stringContaining('attempt 3 of 3')
+      );
+
+      // Attempt 4: circuit breaker trips, accepts success
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.DONE);
+
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'incomplete_todos_accepted',
+        'Accepting success despite incomplete todos after 3 downgrade attempts',
+        expect.any(Object),
+      );
+    });
+
+    it('should reset todoDowngradeAttempts on reset', () => {
+      const todos: TodoItem[] = [
+        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
+      ];
+      enforcer.updateTodos(todos);
+
+      // Trigger one downgrade
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+
+      // Reset clears everything including downgrade counter
+      enforcer.reset();
+      enforcer.updateTodos(todos);
+
+      // Should downgrade again (counter was reset, so this is attempt 1 not 2)
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'incomplete_todos',
+        'Agent claimed success but has incomplete todos - downgrading to partial (attempt 1/3)',
+        expect.any(Object),
+      );
     });
 
     it('should handle missing input gracefully', () => {
@@ -243,6 +341,41 @@ describe('CompletionEnforcer', () => {
       expect(onStartContinuationMock).toHaveBeenCalledWith(
         expect.stringContaining('REMINDER: You must call complete_task when finished')
       );
+    });
+
+    it('should use incomplete todos prompt when downgrade was triggered by todos', async () => {
+      const todos: TodoItem[] = [
+        { id: '1', content: 'Write tests', status: 'pending', priority: 'high' },
+      ];
+      enforcer.updateTodos(todos);
+
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+
+      await enforcer.handleProcessExit(0);
+
+      const prompt = onStartContinuationMock.mock.calls[0][0] as string;
+      expect(prompt).toContain('You called complete_task with status="success", but you have incomplete todos');
+      expect(prompt).toContain('Write tests');
+      expect(prompt).toContain('attempt 1 of 3');
+    });
+
+    it('should use standard partial prompt when agent genuinely says partial', async () => {
+      enforcer.handleCompleteTaskDetection({
+        status: 'partial',
+        summary: 'Partial done',
+        original_request_summary: 'Original request',
+        remaining_work: 'More work',
+      });
+
+      await enforcer.handleProcessExit(0);
+
+      const prompt = onStartContinuationMock.mock.calls[0][0] as string;
+      expect(prompt).toContain('You called complete_task with status="partial"');
+      expect(prompt).not.toContain('incomplete todos');
     });
 
     it('should call onComplete when no pending actions', async () => {

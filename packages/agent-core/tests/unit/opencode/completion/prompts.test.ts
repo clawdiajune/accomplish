@@ -101,7 +101,7 @@ describe('Completion Prompts', () => {
   describe('getIncompleteTodosPrompt', () => {
     it('should include incomplete todos', () => {
       const incompleteTodos = '- Task 1\n- Task 2\n- Task 3';
-      const prompt = getIncompleteTodosPrompt(incompleteTodos);
+      const prompt = getIncompleteTodosPrompt(incompleteTodos, 1, 3);
 
       expect(prompt).toContain('- Task 1');
       expect(prompt).toContain('- Task 2');
@@ -109,22 +109,29 @@ describe('Completion Prompts', () => {
     });
 
     it('should ask to complete or cancel items', () => {
-      const prompt = getIncompleteTodosPrompt('- Incomplete item');
+      const prompt = getIncompleteTodosPrompt('- Incomplete item', 1, 3);
 
-      expect(prompt).toContain('complete these items');
-      expect(prompt).toContain('mark them as cancelled');
+      expect(prompt).toContain('Complete the remaining items above');
+      expect(prompt).toContain('mark items as cancelled');
     });
 
     it('should instruct to call complete_task again', () => {
-      const prompt = getIncompleteTodosPrompt('- Item');
+      const prompt = getIncompleteTodosPrompt('- Item', 1, 3);
 
-      expect(prompt).toContain('call complete_task again');
+      expect(prompt).toContain('call complete_task with status="success" again');
     });
 
     it('should mention incomplete todos in message', () => {
-      const prompt = getIncompleteTodosPrompt('- Item');
+      const prompt = getIncompleteTodosPrompt('- Item', 1, 3);
 
-      expect(prompt).toContain('marked the task complete but have incomplete todos');
+      expect(prompt).toContain('you have incomplete todos');
+    });
+
+    it('should include attempt info', () => {
+      const prompt = getIncompleteTodosPrompt('- Item', 2, 3);
+
+      expect(prompt).toContain('attempt 2 of 3');
+      expect(prompt).toContain('After 3 attempts');
     });
   });
 });

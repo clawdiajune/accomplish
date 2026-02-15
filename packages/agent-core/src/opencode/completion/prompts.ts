@@ -54,10 +54,21 @@ Before continuing, you MUST:
 Now create your continuation plan and resume working on the remaining items.`;
 }
 
-export function getIncompleteTodosPrompt(incompleteTodos: string): string {
-  return `You marked the task complete but have incomplete todos:
+export function getIncompleteTodosPrompt(
+  incompleteTodos: string,
+  attempt: number,
+  maxAttempts: number
+): string {
+  return `You called complete_task with status="success", but you have incomplete todos:
 
 ${incompleteTodos}
 
-Either complete these items or update the todo list to mark them as cancelled if no longer needed. Then call complete_task again.`;
+This is attempt ${attempt} of ${maxAttempts}. After ${maxAttempts} attempts, your completion will be accepted as-is.
+
+To resolve this:
+1. Complete the remaining items above, OR
+2. Update your todo list to mark items as cancelled if no longer needed
+3. Then call complete_task with status="success" again
+
+If you cannot resolve these items, explain why in your next complete_task call.`;
 }
