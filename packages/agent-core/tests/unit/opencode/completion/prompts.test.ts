@@ -108,23 +108,24 @@ describe('Completion Prompts', () => {
       expect(prompt).toContain('- Task 3');
     });
 
-    it('should ask to complete or cancel items', () => {
+    it('should mention todowrite tool for updating todos', () => {
       const prompt = getIncompleteTodosPrompt('- Incomplete item', 1, 3);
 
-      expect(prompt).toContain('Complete the remaining items above');
-      expect(prompt).toContain('mark items as cancelled');
+      expect(prompt).toContain('todowrite');
+      expect(prompt).toContain('completed');
+      expect(prompt).toContain('cancelled');
     });
 
     it('should instruct to call complete_task again', () => {
       const prompt = getIncompleteTodosPrompt('- Item', 1, 3);
 
-      expect(prompt).toContain('call complete_task with status="success" again');
+      expect(prompt).toContain('call complete_task with status="success"');
     });
 
-    it('should mention incomplete todos in message', () => {
+    it('should mention interception', () => {
       const prompt = getIncompleteTodosPrompt('- Item', 1, 3);
 
-      expect(prompt).toContain('you have incomplete todos');
+      expect(prompt).toContain('INTERCEPTED');
     });
 
     it('should include attempt info', () => {

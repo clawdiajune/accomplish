@@ -150,7 +150,7 @@ describe('CompletionEnforcer', () => {
       expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
       // Should use incomplete todos prompt, not standard partial prompt
       expect(onStartContinuationMock).toHaveBeenLastCalledWith(
-        expect.stringContaining('You called complete_task with status="success", but you have incomplete todos')
+        expect.stringContaining('Your complete_task(status="success") was INTERCEPTED')
       );
 
       // Attempt 2: downgrade to partial
@@ -298,6 +298,65 @@ describe('CompletionEnforcer', () => {
       expect(result).toBe('complete');
     });
 
+    it('should force complete when todo downgrades are exhausted and agent stops without complete_task', async () => {
+      const todos: TodoItem[] = [
+        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
+      ];
+      enforcer.updateTodos(todos);
+
+      // Exhaust all 3 downgrade attempts via partial continuation cycle
+      for (let i = 0; i < 3; i++) {
+        enforcer.handleCompleteTaskDetection({
+          status: 'success',
+          summary: 'Done',
+          original_request_summary: 'Test',
+        });
+        // Process exit triggers continuation
+        await enforcer.handleProcessExit(0);
+      }
+
+      // 4th call: circuit breaker trips, success is accepted, state goes to DONE
+      enforcer.handleCompleteTaskDetection({
+        status: 'success',
+        summary: 'Done',
+        original_request_summary: 'Test',
+      });
+      expect(enforcer.getState()).toBe(CompletionFlowState.DONE);
+
+      // Process exits cleanly — should complete
+      await enforcer.handleProcessExit(0);
+      expect(onCompleteMock).toHaveBeenCalled();
+    });
+
+    it('should force complete via handleStepFinish when agent stops talking after exhaustion', async () => {
+      const todos: TodoItem[] = [
+        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
+      ];
+      enforcer.updateTodos(todos);
+
+      // Exhaust all 3 downgrade attempts
+      for (let i = 0; i < 3; i++) {
+        enforcer.handleCompleteTaskDetection({
+          status: 'success',
+          summary: 'Done',
+          original_request_summary: 'Test',
+        });
+        await enforcer.handleProcessExit(0);
+      }
+
+      // Now simulate: agent doesn't call complete_task, just outputs text and stops
+      // (This is the scenario from the logs where agent argues with the system)
+      enforcer.markToolsUsed();
+      const action = enforcer.handleStepFinish('stop');
+
+      // Should force complete, NOT schedule generic continuation
+      expect(action).toBe('complete');
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'force_complete',
+        'Todo downgrade limit reached — forcing task completion'
+      );
+    });
+
     it('should handle "end_turn" reason same as "stop"', () => {
       enforcer.handleCompleteTaskDetection({
         status: 'success',
@@ -358,7 +417,7 @@ describe('CompletionEnforcer', () => {
       await enforcer.handleProcessExit(0);
 
       const prompt = onStartContinuationMock.mock.calls[0][0] as string;
-      expect(prompt).toContain('You called complete_task with status="success", but you have incomplete todos');
+      expect(prompt).toContain('Your complete_task(status="success") was INTERCEPTED');
       expect(prompt).toContain('Write tests');
       expect(prompt).toContain('attempt 1 of 3');
     });

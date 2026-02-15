@@ -21,6 +21,7 @@ export class CompletionEnforcer {
   // If more downgrade reasons are added, replace this boolean with a union type:
   // private downgradeReason: 'none' | 'incomplete_todos' | '...' = 'none';
   private todoDowngradeTriggered: boolean = false;
+  private todoDowngradeExhausted: boolean = false;
 
   constructor(callbacks: CompletionEnforcerCallbacks, maxContinuationAttempts: number = 10) {
     this.callbacks = callbacks;
@@ -76,6 +77,8 @@ export class CompletionEnforcer {
           `Accepting success despite incomplete todos after ${CompletionEnforcer.MAX_TODO_DOWNGRADES} downgrade attempts`,
           { incompleteTodos: this.getIncompleteTodosSummary() }
         );
+        // Force acceptance — don't let any more continuations happen
+        this.todoDowngradeExhausted = true;
       }
     }
 
@@ -105,6 +108,15 @@ export class CompletionEnforcer {
     }
 
     if (!this.state.isCompleteTaskCalled()) {
+      // If todo downgrades are exhausted, stop all continuations — the task is done
+      if (this.todoDowngradeExhausted || this.todoDowngradeAttempts >= CompletionEnforcer.MAX_TODO_DOWNGRADES) {
+        this.callbacks.onDebug(
+          'force_complete',
+          'Todo downgrade limit reached — forcing task completion'
+        );
+        return 'complete';
+      }
+
       if (!this.toolsWereUsed) {
         this.callbacks.onDebug(
           'skip_continuation',
@@ -196,6 +208,7 @@ export class CompletionEnforcer {
     this.toolsWereUsed = false;
     this.todoDowngradeAttempts = 0;
     this.todoDowngradeTriggered = false;
+    this.todoDowngradeExhausted = false;
   }
 
   private hasIncompleteTodos(): boolean {
