@@ -101,7 +101,7 @@ describe('Completion Prompts', () => {
   describe('getIncompleteTodosPrompt', () => {
     it('should include incomplete todos', () => {
       const incompleteTodos = '- Task 1\n- Task 2\n- Task 3';
-      const prompt = getIncompleteTodosPrompt(incompleteTodos, 1, 3);
+      const prompt = getIncompleteTodosPrompt(incompleteTodos);
 
       expect(prompt).toContain('- Task 1');
       expect(prompt).toContain('- Task 2');
@@ -109,30 +109,27 @@ describe('Completion Prompts', () => {
     });
 
     it('should mention todowrite tool for updating todos', () => {
-      const prompt = getIncompleteTodosPrompt('- Incomplete item', 1, 3);
+      const prompt = getIncompleteTodosPrompt('- Incomplete item');
 
       expect(prompt).toContain('todowrite');
       expect(prompt).toContain('completed');
       expect(prompt).toContain('cancelled');
     });
 
-    it('should instruct to call complete_task again', () => {
-      const prompt = getIncompleteTodosPrompt('- Item', 1, 3);
+    it('should instruct to call complete_task after todowrite', () => {
+      const prompt = getIncompleteTodosPrompt('- Item');
 
       expect(prompt).toContain('call complete_task with status="success"');
+      expect(prompt).toContain('After todowrite');
     });
 
-    it('should mention interception', () => {
-      const prompt = getIncompleteTodosPrompt('- Item', 1, 3);
+    it('should be direct and handle both done and not-done cases', () => {
+      const prompt = getIncompleteTodosPrompt('- Item');
 
-      expect(prompt).toContain('INTERCEPTED');
-    });
-
-    it('should include attempt info', () => {
-      const prompt = getIncompleteTodosPrompt('- Item', 2, 3);
-
-      expect(prompt).toContain('attempt 2 of 3');
-      expect(prompt).toContain('After 3 attempts');
+      expect(prompt).toContain('STOP');
+      expect(prompt).toContain('rejected');
+      expect(prompt).toContain('NOT done the work yet');
+      expect(prompt).toContain('call todowrite');
     });
   });
 });

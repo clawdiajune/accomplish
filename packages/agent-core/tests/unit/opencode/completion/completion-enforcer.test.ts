@@ -108,7 +108,7 @@ describe('CompletionEnforcer', () => {
 
       expect(onDebugMock).toHaveBeenCalledWith(
         'incomplete_todos',
-        'Agent claimed success but has incomplete todos - downgrading to partial (attempt 1/3)',
+        'Agent claimed success but has incomplete todos - downgrading to partial',
         expect.any(Object)
       );
 
@@ -129,104 +129,6 @@ describe('CompletionEnforcer', () => {
       });
 
       expect(enforcer.getState()).toBe(CompletionFlowState.DONE);
-    });
-
-    it('should accept success after repeated todo downgrades (circuit breaker)', async () => {
-      const todos: TodoItem[] = [
-        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
-      ];
-      enforcer.updateTodos(todos);
-
-      // Attempt 1: downgrade to partial
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
-
-      // Continuation resets state to IDLE via handleProcessExit
-      await enforcer.handleProcessExit(0);
-      expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
-      // Should use incomplete todos prompt, not standard partial prompt
-      expect(onStartContinuationMock).toHaveBeenLastCalledWith(
-        expect.stringContaining('Your complete_task(status="success") was INTERCEPTED')
-      );
-
-      // Attempt 2: downgrade to partial
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
-
-      await enforcer.handleProcessExit(0);
-      expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
-      expect(onStartContinuationMock).toHaveBeenLastCalledWith(
-        expect.stringContaining('attempt 2 of 3')
-      );
-
-      // Attempt 3: downgrade to partial
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
-
-      await enforcer.handleProcessExit(0);
-      expect(enforcer.getState()).toBe(CompletionFlowState.IDLE);
-      expect(onStartContinuationMock).toHaveBeenLastCalledWith(
-        expect.stringContaining('attempt 3 of 3')
-      );
-
-      // Attempt 4: circuit breaker trips, accepts success
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.DONE);
-
-      expect(onDebugMock).toHaveBeenCalledWith(
-        'incomplete_todos_accepted',
-        'Accepting success despite incomplete todos after 3 downgrade attempts',
-        expect.any(Object),
-      );
-    });
-
-    it('should reset todoDowngradeAttempts on reset', () => {
-      const todos: TodoItem[] = [
-        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
-      ];
-      enforcer.updateTodos(todos);
-
-      // Trigger one downgrade
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
-
-      // Reset clears everything including downgrade counter
-      enforcer.reset();
-      enforcer.updateTodos(todos);
-
-      // Should downgrade again (counter was reset, so this is attempt 1 not 2)
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
-
-      expect(onDebugMock).toHaveBeenCalledWith(
-        'incomplete_todos',
-        'Agent claimed success but has incomplete todos - downgrading to partial (attempt 1/3)',
-        expect.any(Object),
-      );
     });
 
     it('should handle missing input gracefully', () => {
@@ -263,7 +165,6 @@ describe('CompletionEnforcer', () => {
     });
 
     it('should return "complete" when no tools used and no complete_task called', () => {
-      // Don't mark tools as used
       const result = enforcer.handleStepFinish('stop');
 
       expect(result).toBe('complete');
@@ -296,65 +197,6 @@ describe('CompletionEnforcer', () => {
       const result = enforcer.handleStepFinish('stop');
 
       expect(result).toBe('complete');
-    });
-
-    it('should force complete when todo downgrades are exhausted and agent stops without complete_task', async () => {
-      const todos: TodoItem[] = [
-        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
-      ];
-      enforcer.updateTodos(todos);
-
-      // Exhaust all 3 downgrade attempts via partial continuation cycle
-      for (let i = 0; i < 3; i++) {
-        enforcer.handleCompleteTaskDetection({
-          status: 'success',
-          summary: 'Done',
-          original_request_summary: 'Test',
-        });
-        // Process exit triggers continuation
-        await enforcer.handleProcessExit(0);
-      }
-
-      // 4th call: circuit breaker trips, success is accepted, state goes to DONE
-      enforcer.handleCompleteTaskDetection({
-        status: 'success',
-        summary: 'Done',
-        original_request_summary: 'Test',
-      });
-      expect(enforcer.getState()).toBe(CompletionFlowState.DONE);
-
-      // Process exits cleanly — should complete
-      await enforcer.handleProcessExit(0);
-      expect(onCompleteMock).toHaveBeenCalled();
-    });
-
-    it('should force complete via handleStepFinish when agent stops talking after exhaustion', async () => {
-      const todos: TodoItem[] = [
-        { id: '1', content: 'Task 1', status: 'pending', priority: 'high' },
-      ];
-      enforcer.updateTodos(todos);
-
-      // Exhaust all 3 downgrade attempts
-      for (let i = 0; i < 3; i++) {
-        enforcer.handleCompleteTaskDetection({
-          status: 'success',
-          summary: 'Done',
-          original_request_summary: 'Test',
-        });
-        await enforcer.handleProcessExit(0);
-      }
-
-      // Now simulate: agent doesn't call complete_task, just outputs text and stops
-      // (This is the scenario from the logs where agent argues with the system)
-      enforcer.markToolsUsed();
-      const action = enforcer.handleStepFinish('stop');
-
-      // Should force complete, NOT schedule generic continuation
-      expect(action).toBe('complete');
-      expect(onDebugMock).toHaveBeenCalledWith(
-        'force_complete',
-        'Todo downgrade limit reached — forcing task completion'
-      );
     });
 
     it('should handle "end_turn" reason same as "stop"', () => {
@@ -417,9 +259,9 @@ describe('CompletionEnforcer', () => {
       await enforcer.handleProcessExit(0);
 
       const prompt = onStartContinuationMock.mock.calls[0][0] as string;
-      expect(prompt).toContain('Your complete_task(status="success") was INTERCEPTED');
+      expect(prompt).toContain('STOP. Your complete_task was rejected');
       expect(prompt).toContain('Write tests');
-      expect(prompt).toContain('attempt 1 of 3');
+      expect(prompt).toContain('todowrite');
     });
 
     it('should use standard partial prompt when agent genuinely says partial', async () => {
@@ -473,6 +315,23 @@ describe('CompletionEnforcer', () => {
 
       expect(onCompleteMock).toHaveBeenCalled();
       expect(onStartContinuationMock).not.toHaveBeenCalled();
+    });
+
+    it('should include continuationPrompt in debug log', async () => {
+      enforcer.handleCompleteTaskDetection({
+        status: 'partial',
+        summary: 'Partial',
+        original_request_summary: 'Original request',
+        remaining_work: 'More work',
+      });
+
+      await enforcer.handleProcessExit(0);
+
+      expect(onDebugMock).toHaveBeenCalledWith(
+        'partial_continuation',
+        expect.stringContaining('Starting partial continuation'),
+        expect.objectContaining({ continuationPrompt: expect.any(String) })
+      );
     });
   });
 

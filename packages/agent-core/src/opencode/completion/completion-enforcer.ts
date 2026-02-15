@@ -11,19 +11,13 @@ export interface CompletionEnforcerCallbacks {
 export type StepFinishAction = 'continue' | 'pending' | 'complete';
 
 export class CompletionEnforcer {
-  private static readonly MAX_TODO_DOWNGRADES = 3;
-
   private state: CompletionState;
   private callbacks: CompletionEnforcerCallbacks;
   private currentTodos: TodoItem[] = [];
   private toolsWereUsed: boolean = false;
-  private todoDowngradeAttempts: number = 0;
-  // If more downgrade reasons are added, replace this boolean with a union type:
-  // private downgradeReason: 'none' | 'incomplete_todos' | '...' = 'none';
   private todoDowngradeTriggered: boolean = false;
-  private todoDowngradeExhausted: boolean = false;
 
-  constructor(callbacks: CompletionEnforcerCallbacks, maxContinuationAttempts: number = 10) {
+  constructor(callbacks: CompletionEnforcerCallbacks, maxContinuationAttempts?: number) {
     this.callbacks = callbacks;
     this.state = new CompletionState(maxContinuationAttempts);
   }
@@ -61,25 +55,14 @@ export class CompletionEnforcer {
     };
 
     if (completeTaskArgs.status === 'success' && this.hasIncompleteTodos()) {
-      this.todoDowngradeAttempts++;
-      if (this.todoDowngradeAttempts <= CompletionEnforcer.MAX_TODO_DOWNGRADES) {
-        this.callbacks.onDebug(
-          'incomplete_todos',
-          `Agent claimed success but has incomplete todos - downgrading to partial (attempt ${this.todoDowngradeAttempts}/${CompletionEnforcer.MAX_TODO_DOWNGRADES})`,
-          { incompleteTodos: this.getIncompleteTodosSummary() }
-        );
-        this.todoDowngradeTriggered = true;
-        completeTaskArgs.status = 'partial';
-        completeTaskArgs.remaining_work = this.getIncompleteTodosSummary();
-      } else {
-        this.callbacks.onDebug(
-          'incomplete_todos_accepted',
-          `Accepting success despite incomplete todos after ${CompletionEnforcer.MAX_TODO_DOWNGRADES} downgrade attempts`,
-          { incompleteTodos: this.getIncompleteTodosSummary() }
-        );
-        // Force acceptance — don't let any more continuations happen
-        this.todoDowngradeExhausted = true;
-      }
+      this.callbacks.onDebug(
+        'incomplete_todos',
+        'Agent claimed success but has incomplete todos - downgrading to partial',
+        { incompleteTodos: this.getIncompleteTodosSummary() }
+      );
+      this.todoDowngradeTriggered = true;
+      completeTaskArgs.status = 'partial';
+      completeTaskArgs.remaining_work = this.getIncompleteTodosSummary();
     }
 
     this.state.recordCompleteTaskCall(completeTaskArgs);
@@ -108,15 +91,6 @@ export class CompletionEnforcer {
     }
 
     if (!this.state.isCompleteTaskCalled()) {
-      // If todo downgrades are exhausted, stop all continuations — the task is done
-      if (this.todoDowngradeExhausted || this.todoDowngradeAttempts >= CompletionEnforcer.MAX_TODO_DOWNGRADES) {
-        this.callbacks.onDebug(
-          'force_complete',
-          'Todo downgrade limit reached — forcing task completion'
-        );
-        return 'complete';
-      }
-
       if (!this.toolsWereUsed) {
         this.callbacks.onDebug(
           'skip_continuation',
@@ -146,9 +120,7 @@ export class CompletionEnforcer {
       let prompt: string;
       if (this.todoDowngradeTriggered) {
         prompt = getIncompleteTodosPrompt(
-          args?.remaining_work || 'No remaining work specified',
-          this.todoDowngradeAttempts,
-          CompletionEnforcer.MAX_TODO_DOWNGRADES
+          args?.remaining_work || 'No remaining work specified'
         );
         this.todoDowngradeTriggered = false;
       } else {
@@ -170,7 +142,7 @@ export class CompletionEnforcer {
       this.callbacks.onDebug(
         'partial_continuation',
         `Starting partial continuation (attempt ${this.state.getContinuationAttempts()})`,
-        { remainingWork: args?.remaining_work, summary: args?.summary }
+        { remainingWork: args?.remaining_work, summary: args?.summary, continuationPrompt: prompt }
       );
 
       this.toolsWereUsed = false;
@@ -206,9 +178,7 @@ export class CompletionEnforcer {
     this.state.reset();
     this.currentTodos = [];
     this.toolsWereUsed = false;
-    this.todoDowngradeAttempts = 0;
     this.todoDowngradeTriggered = false;
-    this.todoDowngradeExhausted = false;
   }
 
   private hasIncompleteTodos(): boolean {

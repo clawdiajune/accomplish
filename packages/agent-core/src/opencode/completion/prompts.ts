@@ -55,22 +55,12 @@ Now create your continuation plan and resume working on the remaining items.`;
 }
 
 export function getIncompleteTodosPrompt(
-  incompleteTodos: string,
-  attempt: number,
-  maxAttempts: number
+  incompleteTodos: string
 ): string {
-  return `IMPORTANT: Your complete_task(status="success") was INTERCEPTED by the system because your todo list still has incomplete items:
-
+  return `STOP. Your complete_task was rejected because these todo items are still marked incomplete:
 ${incompleteTodos}
 
-This is attempt ${attempt} of ${maxAttempts}. After ${maxAttempts} attempts, your completion will be accepted as-is.
-
-This is NOT a system error. The system checks your todo list before accepting completion.
-
-If you already completed these items, you MUST update your todo list using the todowrite tool to mark them as "completed" or "cancelled". Then call complete_task with status="success" again.
-
-Do NOT argue with the system or claim this is a bug. Either:
-1. Use todowrite to mark completed items as "completed"
-2. Use todowrite to mark no-longer-needed items as "cancelled"
-3. Then call complete_task with status="success"`;
+If you have NOT done the work yet, do it first.
+Then call todowrite to update each item: "completed" (if done) or "cancelled" (if not needed).
+After todowrite, call complete_task with status="success".`;
 }
