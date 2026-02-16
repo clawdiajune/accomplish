@@ -1,5 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OpenCodeCliNotFoundError } from '../../../src/opencode/adapter.js';
+import { EventEmitter } from 'events';
+
+// Mock node-pty before importing adapter
+vi.mock('node-pty', () => ({
+  default: { spawn: vi.fn() },
+  spawn: vi.fn(),
+}));
+
+// Mock log-watcher before importing adapter
+vi.mock('../../../src/opencode/log-watcher.js', () => ({
+  createLogWatcher: () => new EventEmitter(),
+  OpenCodeLogWatcher: { getErrorMessage: vi.fn() },
+}));
+
+import { OpenCodeAdapter, OpenCodeCliNotFoundError } from '../../../src/opencode/adapter.js';
+import type { AdapterOptions } from '../../../src/opencode/adapter.js';
 import {
   CompletionEnforcer,
   CompletionFlowState,
@@ -540,6 +555,98 @@ describe('Integration flow: conversational turn', () => {
     });
     expect(enforcer.shouldComplete()).toBe(false);
     expect(enforcer.getState()).toBe(CompletionFlowState.PARTIAL_CONTINUATION_PENDING);
+  });
+});
+
+describe('OpenCodeAdapter: complete_task summary and message flow', () => {
+  let adapter: OpenCodeAdapter;
+  const defaultOptions: AdapterOptions = {
+    platform: 'darwin',
+    isPackaged: false,
+    tempPath: '/tmp',
+    getCliCommand: () => ({ command: 'echo', args: [] }),
+    buildEnvironment: async () => ({}),
+    buildCliArgs: async () => [],
+  };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    adapter = new OpenCodeAdapter(defaultOptions);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Helper to call the private handleMessage method
+  function callHandleMessage(adapterInstance: OpenCodeAdapter, message: unknown): void {
+    (adapterInstance as unknown as { handleMessage: (msg: unknown) => void }).handleMessage(message);
+  }
+
+  it('emits synthetic text message from complete_task summary', () => {
+    const messages: unknown[] = [];
+    adapter.on('message', (msg) => messages.push(msg));
+
+    callHandleMessage(adapter, {
+      type: 'tool_call',
+      part: { tool: 'complete_task', input: { status: 'success', summary: 'Task completed successfully' }, sessionID: 'test-session' },
+    });
+
+    const textMsg = messages.find((m: unknown) => (m as { type: string }).type === 'text');
+    expect(textMsg).toBeDefined();
+    expect((textMsg as { part: { text: string } }).part.text).toBe('Task completed successfully');
+  });
+
+  it('does not emit synthetic text when complete_task has no summary', () => {
+    const messages: unknown[] = [];
+    adapter.on('message', (msg) => messages.push(msg));
+
+    callHandleMessage(adapter, {
+      type: 'tool_call',
+      part: { tool: 'complete_task', input: { status: 'success' }, sessionID: 'test-session' },
+    });
+
+    const textMsgs = messages.filter((m: unknown) => (m as { type: string }).type === 'text');
+    expect(textMsgs).toHaveLength(0);
+  });
+
+  it('continues processing messages after hasCompleted is set', () => {
+    const messages: unknown[] = [];
+    adapter.on('message', (msg) => messages.push(msg));
+
+    // Force hasCompleted = true (simulating completion via step_finish)
+    (adapter as unknown as { hasCompleted: boolean }).hasCompleted = true;
+
+    callHandleMessage(adapter, {
+      type: 'text',
+      part: { type: 'text', text: 'Final response after completion', sessionID: 'test-session' },
+    });
+
+    expect(messages.length).toBe(1);
+    expect((messages[0] as { part: { text: string } }).part.text).toBe('Final response after completion');
+  });
+
+  it('does not eagerly complete in handleToolCall when complete_task is detected', () => {
+    const completeEvents: unknown[] = [];
+    adapter.on('complete', (result) => completeEvents.push(result));
+
+    // Send start_task first (needs_planning=true)
+    callHandleMessage(adapter, {
+      type: 'tool_call',
+      part: { tool: 'start_task', input: { needs_planning: true, goal: 'test', steps: ['step1'], verification: ['v1'] }, sessionID: 'test-session' },
+    });
+
+    // Send complete_task — should NOT emit 'complete' event directly
+    callHandleMessage(adapter, {
+      type: 'tool_call',
+      part: { tool: 'complete_task', input: { status: 'success', summary: 'Done' }, sessionID: 'test-session' },
+    });
+
+    // No eager completion — handleProcessExit should handle it
+    expect(completeEvents).toHaveLength(0);
+    expect((adapter as unknown as { hasCompleted: boolean }).hasCompleted).toBe(false);
   });
 });
 
