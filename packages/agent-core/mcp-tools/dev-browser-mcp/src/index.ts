@@ -773,13 +773,21 @@ const SNAPSHOT_SCRIPT = `
   }
   function isVisuallyDisabled(element) {
     const style = getElementComputedStyle(element);
-    if (!style) return false;
-    if (style.pointerEvents === "none") return true;
+    if (!style) {
+      return false;
+    }
+    if (style.pointerEvents === "none") {
+      return true;
+    }
     const opacity = parseFloat(style.opacity);
-    if (!isNaN(opacity) && opacity < 0.5) return true;
+    if (!isNaN(opacity) && opacity < 0.5) {
+      return true;
+    }
     const role = getAriaRole(element);
     if (role === "button" || role === "link" || role === "menuitem" || role === "tab") {
-      if (style.cursor === "default" || style.cursor === "not-allowed") return true;
+      if (style.cursor === "default" || style.cursor === "not-allowed") {
+        return true;
+      }
     }
     return false;
   }
