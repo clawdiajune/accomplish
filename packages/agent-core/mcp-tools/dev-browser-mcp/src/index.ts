@@ -3132,6 +3132,14 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
               break;
           }
 
+          // Move mouse to viewport center before wheeling so the browser routes
+          // the wheel event to the correct scrollable container. Apps like Gmail
+          // use nested scroll divs — wheeling at an arbitrary mouse position may
+          // hit a non-scrollable area and have no effect.
+          const scrollViewport = page.viewportSize();
+          const centerX = (scrollViewport?.width || 1280) / 2;
+          const centerY = (scrollViewport?.height || 720) / 2;
+          await page.mouse.move(centerX, centerY);
           await page.mouse.wheel(deltaX, deltaY);
           resetSnapshotManager();
           return {
