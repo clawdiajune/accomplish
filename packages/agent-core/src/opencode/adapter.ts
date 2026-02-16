@@ -2,7 +2,7 @@ import * as pty from 'node-pty';
 import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+
 import { StreamParser } from './stream-parser.js';
 import { OpenCodeLogWatcher, createLogWatcher, OpenCodeLogError } from './log-watcher.js';
 import { CompletionEnforcer, CompletionEnforcerCallbacks } from './completion/index.js';
@@ -11,6 +11,8 @@ import type { OpenCodeMessage } from '../common/types/opencode.js';
 import type { PermissionRequest } from '../common/types/permission.js';
 import type { TodoItem } from '../common/types/todo.js';
 import { serializeError } from '../utils/error.js';
+
+const LOG_TRUNCATION_LIMIT = 500;
 
 export class OpenCodeCliNotFoundError extends Error {
   constructor() {
@@ -237,7 +239,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
           .replace(/\x1B\][^\x07]*\x07/g, '')
           .replace(/\x1B\][^\x1B]*\x1B\\/g, '');
         if (cleanData.trim()) {
-          const truncated = cleanData.substring(0, 500) + (cleanData.length > 500 ? '...' : '');
+          const truncated = cleanData.substring(0, LOG_TRUNCATION_LIMIT) + (cleanData.length > LOG_TRUNCATION_LIMIT ? '...' : '');
           console.log('[OpenCode CLI stdout]:', truncated);
           this.emit('debug', { type: 'stdout', message: cleanData });
 
@@ -536,19 +538,19 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       const startInput = toolInput as StartTaskInput;
       if (startInput?.needs_planning) {
         this.completionEnforcer.markTaskRequiresCompletion();
-      }
-      if (startInput?.needs_planning && startInput?.goal && startInput?.steps) {
-        this.emitPlanMessage(startInput, sessionID || this.currentSessionId || '');
-        const todos: TodoItem[] = startInput.steps.map((step, i) => ({
-          id: String(i + 1),
-          content: step,
-          status: i === 0 ? 'in_progress' : 'pending',
-          priority: 'medium',
-        }));
-        if (todos.length > 0) {
-          this.emit('todo:update', todos);
-          this.completionEnforcer.updateTodos(todos);
-          console.log('[OpenCode Adapter] Created todos from start_task steps');
+        if (startInput.goal && startInput.steps) {
+          this.emitPlanMessage(startInput, sessionID || this.currentSessionId || '');
+          const todos: TodoItem[] = startInput.steps.map((step, i) => ({
+            id: String(i + 1),
+            content: step,
+            status: i === 0 ? 'in_progress' : 'pending',
+            priority: 'medium',
+          }));
+          if (todos.length > 0) {
+            this.emit('todo:update', todos);
+            this.completionEnforcer.updateTodos(todos);
+            console.log('[OpenCode Adapter] Created todos from start_task steps');
+          }
         }
       }
     }
@@ -712,7 +714,7 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
         .replace(/\x1B\][^\x07]*\x07/g, '')
         .replace(/\x1B\][^\x1B]*\x1B\\/g, '');
       if (cleanData.trim()) {
-        const truncated = cleanData.substring(0, 500) + (cleanData.length > 500 ? '...' : '');
+        const truncated = cleanData.substring(0, LOG_TRUNCATION_LIMIT) + (cleanData.length > LOG_TRUNCATION_LIMIT ? '...' : '');
         console.log('[OpenCode CLI stdout]:', truncated);
         this.emit('debug', { type: 'stdout', message: cleanData });
 

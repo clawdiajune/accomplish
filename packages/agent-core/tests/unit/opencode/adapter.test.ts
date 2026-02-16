@@ -78,105 +78,6 @@ describe('OpenCodeAdapter', () => {
   });
 });
 
-describe('Shell escaping utilities', () => {
-  // Test the escaping logic indirectly through observable behavior
-  // These utilities are private but critical for security
-
-  describe('Windows shell escaping', () => {
-    it('should handle arguments with spaces', () => {
-      // Arguments with spaces need quoting on Windows
-      const argWithSpace = 'hello world';
-      expect(argWithSpace.includes(' ')).toBe(true);
-    });
-
-    it('should handle arguments with quotes', () => {
-      // Arguments with quotes need special handling
-      const argWithQuote = 'say "hello"';
-      expect(argWithQuote.includes('"')).toBe(true);
-    });
-  });
-
-  describe('Unix shell escaping', () => {
-    it('should handle arguments with single quotes', () => {
-      // Single quotes need escaping on Unix
-      const argWithSingleQuote = "it's working";
-      expect(argWithSingleQuote.includes("'")).toBe(true);
-    });
-
-    it('should handle arguments with special characters', () => {
-      // Special shell characters need escaping
-      const argWithSpecial = 'echo $HOME';
-      expect(argWithSpecial.includes('$')).toBe(true);
-    });
-  });
-});
-
-describe('Platform-specific behavior', () => {
-  it('should recognize darwin platform', () => {
-    expect(process.platform).toBeDefined();
-  });
-
-  it('should recognize win32 platform', () => {
-    // This tests that the platform string is recognized
-    const platforms = ['win32', 'darwin', 'linux'];
-    expect(platforms).toContain(process.platform);
-  });
-});
-
-describe('Task lifecycle', () => {
-  it('should generate unique task IDs', () => {
-    const ids = new Set<string>();
-    for (let i = 0; i < 100; i++) {
-      const id = `task_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      ids.add(id);
-    }
-    // All IDs should be unique
-    expect(ids.size).toBe(100);
-  });
-
-  it('should generate unique message IDs', () => {
-    const ids = new Set<string>();
-    for (let i = 0; i < 100; i++) {
-      const id = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      ids.add(id);
-    }
-    expect(ids.size).toBe(100);
-  });
-
-  it('should generate unique request IDs', () => {
-    const ids = new Set<string>();
-    for (let i = 0; i < 100; i++) {
-      const id = `req_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      ids.add(id);
-    }
-    expect(ids.size).toBe(100);
-  });
-});
-
-describe('Start task detection', () => {
-  it('should recognize start_task tool', () => {
-    const isStartTask = (name: string) =>
-      name === 'start_task' || name.endsWith('_start_task');
-
-    expect(isStartTask('start_task')).toBe(true);
-    expect(isStartTask('mcp_start_task')).toBe(true);
-    expect(isStartTask('other_tool')).toBe(false);
-  });
-
-  it('should recognize exempt tools', () => {
-    const isExemptTool = (name: string) => {
-      if (name === 'todowrite' || name.endsWith('_todowrite')) return true;
-      if (name === 'start_task' || name.endsWith('_start_task')) return true;
-      return false;
-    };
-
-    expect(isExemptTool('todowrite')).toBe(true);
-    expect(isExemptTool('mcp_todowrite')).toBe(true);
-    expect(isExemptTool('start_task')).toBe(true);
-    expect(isExemptTool('read_file')).toBe(false);
-  });
-});
-
 describe('Plan message formatting', () => {
   it('should format plan with goal and steps when needs_planning is true', () => {
     const input = {
@@ -647,6 +548,85 @@ describe('OpenCodeAdapter: complete_task summary and message flow', () => {
     // No eager completion — handleProcessExit should handle it
     expect(completeEvents).toHaveLength(0);
     expect((adapter as unknown as { hasCompleted: boolean }).hasCompleted).toBe(false);
+  });
+});
+
+describe('OpenCodeAdapter: start_task(needs_planning=true) integration', () => {
+  let adapter: OpenCodeAdapter;
+  const defaultOptions: AdapterOptions = {
+    platform: 'darwin',
+    isPackaged: false,
+    tempPath: '/tmp',
+    getCliCommand: () => ({ command: 'echo', args: [] }),
+    buildEnvironment: async () => ({}),
+    buildCliArgs: async () => [],
+  };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    adapter = new OpenCodeAdapter(defaultOptions);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function callHandleMessage(adapterInstance: OpenCodeAdapter, message: unknown): void {
+    (adapterInstance as unknown as { handleMessage: (msg: unknown) => void }).handleMessage(message);
+  }
+
+  it('emits plan message and todo:update, and marks task requires completion', () => {
+    const emittedMessages: unknown[] = [];
+    const emittedTodos: TodoItem[][] = [];
+
+    adapter.on('message', (msg) => emittedMessages.push(msg));
+    adapter.on('todo:update', (todos) => emittedTodos.push(todos));
+
+    callHandleMessage(adapter, {
+      type: 'tool_call',
+      part: {
+        tool: 'start_task',
+        input: {
+          original_request: 'Build a login form',
+          needs_planning: true,
+          goal: 'Build a login form',
+          steps: ['Create HTML', 'Add CSS', 'Implement validation'],
+          verification: ['Test submission'],
+          skills: [],
+        },
+        sessionID: 'test-session',
+      },
+    });
+
+    // Verify plan message was emitted
+    const planMsg = emittedMessages.find(
+      (m: unknown) => (m as { type: string }).type === 'text' &&
+        (m as { part: { text: string } }).part.text.includes('**Plan:**')
+    );
+    expect(planMsg).toBeDefined();
+    expect((planMsg as { part: { text: string } }).part.text).toContain('Build a login form');
+    expect((planMsg as { part: { text: string } }).part.text).toContain('1. Create HTML');
+
+    // Verify todos were emitted
+    expect(emittedTodos).toHaveLength(1);
+    const todos = emittedTodos[0];
+    expect(todos).toHaveLength(3);
+    expect(todos[0].content).toBe('Create HTML');
+    expect(todos[0].status).toBe('in_progress');
+    expect(todos[1].status).toBe('pending');
+    expect(todos[2].status).toBe('pending');
+
+    // Verify markTaskRequiresCompletion was called (step_finish without complete_task should NOT complete)
+    callHandleMessage(adapter, {
+      type: 'tool_call',
+      part: { tool: 'bash', input: {}, sessionID: 'test-session' },
+    });
+
+    const completionEnforcer = (adapter as unknown as { completionEnforcer: CompletionEnforcer }).completionEnforcer;
+    const action = completionEnforcer.handleStepFinish('stop');
+    expect(action).toBe('pending');
   });
 });
 
