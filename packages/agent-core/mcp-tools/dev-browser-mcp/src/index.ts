@@ -85,19 +85,23 @@ function toAIFriendlyError(error: unknown, selector: string): Error {
   );
 }
 
-// Canvas-heavy apps that render to <canvas> instead of DOM — mouse events
-// are used instead of DOM click since ARIA trees are empty/unhelpful.
-const CANVAS_APPS = [
+// Apps where coordinate-based mouse events are preferred over DOM element.click().
+// Canvas apps: render to <canvas>, ARIA trees are empty/unhelpful.
+// Event-delegation apps: DOM click succeeds but doesn't trigger intended actions
+// because handlers use delegated events that expect real mouse coordinates.
+const COORDINATE_CLICK_APPS = [
   { pattern: /docs\.google\.com/, name: 'Google Docs' },
   { pattern: /sheets\.google\.com/, name: 'Google Sheets' },
   { pattern: /slides\.google\.com/, name: 'Google Slides' },
+  { pattern: /mail\.google\.com/, name: 'Gmail' },
+  { pattern: /drive\.google\.com/, name: 'Google Drive' },
   { pattern: /figma\.com/, name: 'Figma' },
   { pattern: /canva\.com/, name: 'Canva' },
   { pattern: /miro\.com/, name: 'Miro' },
 ];
 
-function isCanvasApp(url: string): string | null {
-  const match = CANVAS_APPS.find(app => app.pattern.test(url));
+function isCoordinateClickApp(url: string): string | null {
+  const match = COORDINATE_CLICK_APPS.find(app => app.pattern.test(url));
   return match ? match.name : null;
 }
 
@@ -2420,7 +2424,7 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
         const url = page.url();
         const title = await page.title();
 
-        const detectedCanvasApp = isCanvasApp(url);
+        const detectedCoordApp = isCoordinateClickApp(url);
 
         const manager = getSnapshotManager();
         const result = manager.processSnapshot(rawSnapshot, url, title, {
@@ -2448,9 +2452,9 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
           output += `Mode: Interactive elements only (buttons, links, inputs)\n`;
         }
 
-        if (detectedCanvasApp) {
-          output += `\n⚠️ CANVAS APP DETECTED: ${detectedCanvasApp}\n`;
-          output += `This app uses canvas rendering. Ref-based clicks auto-fallback to coordinate clicks.\n`;
+        if (detectedCoordApp) {
+          output += `\n⚠️ COORDINATE-CLICK APP DETECTED: ${detectedCoordApp}\n`;
+          output += `Ref-based clicks automatically use coordinate-based clicking for reliability.\n`;
         }
 
         if (result.type === 'diff') {
@@ -2508,18 +2512,18 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
                 isError: true,
               };
             }
-            const canvasApp = isCanvasApp(page.url());
-            if (canvasApp) {
+            const coordApp = isCoordinateClickApp(page.url());
+            if (coordApp) {
               const coords = await getElementCoordinates(element);
               if (!coords) {
                 return {
-                  content: [{ type: 'text', text: `Element [ref=${ref}] has no bounding box on ${canvasApp} canvas app. Try browser_click with explicit x/y coordinates or position="center".` }],
+                  content: [{ type: 'text', text: `Element [ref=${ref}] has no bounding box on ${coordApp}. Try browser_click with explicit x/y coordinates or position="center".` }],
                   isError: true,
                 };
               }
               await page.mouse.click(coords.centerX, coords.centerY, clickOptions);
               await waitForPageLoad(page);
-              return { content: [{ type: 'text' as const, text: `Clicked element [ref=${ref}] at (${coords.centerX}, ${coords.centerY}) [box: ${coords.x}, ${coords.y}, ${coords.width}, ${coords.height}]${clickDesc} (canvas app: ${canvasApp})` }] };
+              return { content: [{ type: 'text' as const, text: `Clicked element [ref=${ref}] at (${coords.centerX}, ${coords.centerY}) [box: ${coords.x}, ${coords.y}, ${coords.width}, ${coords.height}]${clickDesc} (coordinate click: ${coordApp})` }] };
             }
             try {
               await element.click(clickOptions);
@@ -2587,12 +2591,12 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
           const target = ref ? `[ref=${ref}]` : `"${selector}"`;
           const enterNote = press_enter ? ' and pressed Enter' : '';
 
-          const canvasApp = isCanvasApp(page.url());
-          if (canvasApp) {
+          const coordApp = isCoordinateClickApp(page.url());
+          if (coordApp) {
             const coords = await getElementCoordinates(element);
             if (!coords) {
               return {
-                content: [{ type: 'text', text: `Element ${target} has no bounding box on ${canvasApp} canvas app. Try browser_click(position="center-lower") then browser_keyboard(action="type", text="...").` }],
+                content: [{ type: 'text', text: `Element ${target} has no bounding box on ${coordApp}. Try browser_click(position="center-lower") then browser_keyboard(action="type", text="...").` }],
                 isError: true,
               };
             }
@@ -2603,7 +2607,7 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
               await waitForPageLoad(page);
             }
             return {
-              content: [{ type: 'text', text: `Typed "${text}" into ${target} [box: ${coords.x}, ${coords.y}, ${coords.width}, ${coords.height}]${enterNote} (canvas app: ${canvasApp})` }],
+              content: [{ type: 'text', text: `Typed "${text}" into ${target} [box: ${coords.x}, ${coords.y}, ${coords.width}, ${coords.height}]${enterNote} (coordinate click: ${coordApp})` }],
             };
           }
 
@@ -3139,15 +3143,15 @@ The page has loaded. Use browser_snapshot() to see the page elements and find in
               isError: true,
             };
           }
-          const hoverCanvasApp = isCanvasApp(page.url());
-          if (hoverCanvasApp) {
+          const hoverCoordApp = isCoordinateClickApp(page.url());
+          if (hoverCoordApp) {
             const coords = await getElementCoordinates(element);
             if (coords) {
               await page.mouse.move(coords.centerX, coords.centerY);
-              return { content: [{ type: 'text', text: `Hovered over [ref=${ref}] at (${coords.centerX}, ${coords.centerY}) [box: ${coords.x}, ${coords.y}, ${coords.width}, ${coords.height}] (coordinate hover — ${hoverCanvasApp} canvas app)` }] };
+              return { content: [{ type: 'text', text: `Hovered over [ref=${ref}] at (${coords.centerX}, ${coords.centerY}) [box: ${coords.x}, ${coords.y}, ${coords.width}, ${coords.height}] (coordinate hover: ${hoverCoordApp})` }] };
             }
             return {
-              content: [{ type: 'text', text: `Element [ref=${ref}] has no bounding box — cannot coordinate-hover on ${hoverCanvasApp} canvas app. Try browser_hover with explicit x/y coordinates.` }],
+              content: [{ type: 'text', text: `Element [ref=${ref}] has no bounding box on ${hoverCoordApp}. Try browser_hover with explicit x/y coordinates.` }],
               isError: true,
             };
           }
