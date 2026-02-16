@@ -130,7 +130,8 @@ export class CompletionEnforcer {
       const prompt = getPartialContinuationPrompt(
         args?.remaining_work || 'No remaining work specified',
         args?.original_request_summary || 'Unknown request',
-        args?.summary || 'No summary provided'
+        args?.summary || 'No summary provided',
+        this.hasIncompleteTodos() ? this.getIncompleteTodosSummary() : undefined
       );
 
       const canContinue = this.state.startPartialContinuation();
@@ -144,7 +145,7 @@ export class CompletionEnforcer {
       this.callbacks.onDebug(
         'partial_continuation',
         `Starting partial continuation (attempt ${this.state.getContinuationAttempts()})`,
-        { remainingWork: args?.remaining_work, summary: args?.summary }
+        { remainingWork: args?.remaining_work, summary: args?.summary, continuationPrompt: prompt }
       );
 
       this.taskToolsWereUsed = false;

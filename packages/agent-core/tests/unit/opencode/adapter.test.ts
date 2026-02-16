@@ -196,28 +196,6 @@ describe('Plan message formatting', () => {
     expect(skillsSection).toContain('frontend-design, form-validation');
   });
 
-  it('should skip plan emission when needs_planning is false', () => {
-    const input = {
-      needs_planning: false,
-      original_request: 'Hello!',
-      skills: [],
-    };
-
-    // When needs_planning is false, goal and steps are undefined
-    // The adapter guard `if (startInput?.goal && startInput?.steps)` skips plan emission
-    const shouldEmitPlan = !!(input as { goal?: string; steps?: string[] }).goal
-      && !!(input as { goal?: string; steps?: string[] }).steps;
-    expect(shouldEmitPlan).toBe(false);
-  });
-
-  it('should still allow start_task detection when needs_planning is false', () => {
-    const isStartTask = (name: string) =>
-      name === 'start_task' || name.endsWith('_start_task');
-
-    // start_task is recognized regardless of needs_planning value
-    expect(isStartTask('start_task')).toBe(true);
-    expect(isStartTask('mcp_start_task')).toBe(true);
-  });
 });
 
 describe('ANSI escape code filtering', () => {
@@ -277,33 +255,6 @@ describe('AskUserQuestion handling', () => {
     expect(permissionRequest.question).toBe('Do you want to continue?');
     expect(permissionRequest.options?.length).toBe(2);
     expect(permissionRequest.multiSelect).toBe(false);
-  });
-});
-
-describe('isNonTaskContinuationTool classification', () => {
-  const isNonTaskContinuationTool = (toolName: string): boolean => {
-    return toolName === 'skill' || toolName.endsWith('_skill');
-  };
-
-  it('should classify "skill" as non-continuation tool', () => {
-    expect(isNonTaskContinuationTool('skill')).toBe(true);
-  });
-
-  it('should classify mcp-prefixed skill as non-continuation tool', () => {
-    expect(isNonTaskContinuationTool('mcp_skill')).toBe(true);
-    expect(isNonTaskContinuationTool('some_prefix_skill')).toBe(true);
-  });
-
-  it('should classify regular tools as continuation tools', () => {
-    expect(isNonTaskContinuationTool('bash')).toBe(false);
-    expect(isNonTaskContinuationTool('read_file')).toBe(false);
-    expect(isNonTaskContinuationTool('complete_task')).toBe(false);
-    expect(isNonTaskContinuationTool('start_task')).toBe(false);
-  });
-
-  it('should not match skill as substring', () => {
-    expect(isNonTaskContinuationTool('skillful')).toBe(false);
-    expect(isNonTaskContinuationTool('skills')).toBe(false);
   });
 });
 
@@ -440,40 +391,6 @@ describe('complete_task + PTY kill logic', () => {
   });
 });
 
-describe('handleMessage post-completion guard', () => {
-  it('should skip message handling when hasCompleted is true', () => {
-    // Simulate the adapter's guard: if (this.hasCompleted) return;
-    let hasCompleted = true;
-    const events: string[] = [];
-
-    const handleMessage = (type: string) => {
-      if (hasCompleted) return;
-      events.push(type);
-    };
-
-    handleMessage('text');
-    handleMessage('tool_call');
-    handleMessage('step_finish');
-
-    expect(events).toEqual([]);
-  });
-
-  it('should process messages when hasCompleted is false', () => {
-    let hasCompleted = false;
-    const events: string[] = [];
-
-    const handleMessage = (type: string) => {
-      if (hasCompleted) return;
-      events.push(type);
-    };
-
-    handleMessage('text');
-    handleMessage('tool_call');
-
-    expect(events).toEqual(['text', 'tool_call']);
-  });
-});
-
 describe('markToolsUsed with continuation classification', () => {
   let enforcer: CompletionEnforcer;
   let callbacks: CompletionEnforcerCallbacks;
@@ -565,31 +482,3 @@ describe('Integration flow: conversational turn', () => {
   });
 });
 
-describe('emitPlanMessage null safety', () => {
-  it('should handle steps being undefined in plan text generation', () => {
-    // The adapter uses: input.steps?.map(...) ?? ''
-    const input = {
-      goal: 'Some goal',
-      steps: undefined as string[] | undefined,
-    };
-
-    const stepsText = input.steps?.map((s, i) => `${i + 1}. ${s}`).join('\n') ?? '';
-    expect(stepsText).toBe('');
-  });
-
-  it('should handle empty verification array', () => {
-    const verification: string[] = [];
-    const section = verification.length
-      ? `\n\n**Verification:**\n${verification.map((v, i) => `${i + 1}. ${v}`).join('\n')}`
-      : '';
-    expect(section).toBe('');
-  });
-
-  it('should handle empty skills array', () => {
-    const skills: string[] = [];
-    const section = skills.length
-      ? `\n\n**Skills:** ${skills.join(', ')}`
-      : '';
-    expect(section).toBe('');
-  });
-});
