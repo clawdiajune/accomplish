@@ -1,24 +1,4 @@
 export {
-  OpenCodeAdapter,
-  createAdapter,
-  OpenCodeCliNotFoundError,
-} from './adapter.js';
-export type {
-  AdapterOptions,
-  OpenCodeAdapterEvents,
-} from './adapter.js';
-
-export {
-  TaskManager,
-  createTaskManager,
-} from './task-manager.js';
-export type {
-  TaskManagerOptions,
-  TaskCallbacks,
-  TaskProgressEvent,
-} from './task-manager.js';
-
-export {
   resolveCliPath,
   isCliAvailable,
   getCliVersion,
@@ -37,18 +17,6 @@ export type {
   GeneratedConfig,
   BuildCliArgsOptions,
 } from './config-generator.js';
-
-export { StreamParser } from './stream-parser.js';
-export type { StreamParserEvents } from './stream-parser.js';
-
-export {
-  OpenCodeLogWatcher,
-  createLogWatcher,
-} from './log-watcher.js';
-export type {
-  OpenCodeLogError,
-  LogWatcherEvents,
-} from './log-watcher.js';
 
 export {
   getOpenCodeDataHome,
