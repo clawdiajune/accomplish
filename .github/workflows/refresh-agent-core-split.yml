@@ -1,0 +1,38 @@
+name: refresh-agent-core-split
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/agent-core/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refresh agent-core-split
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse --verify agent-core-split >/dev/null 2>&1; then
+            git branch -D agent-core-split
+          fi
+
+          git subtree split --prefix=packages/agent-core -b agent-core-split
+          git push origin agent-core-split --force-with-lease
+
+      - name: Notify downstream
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          gh api "repos/${{ secrets.DISPATCH_TARGET }}/dispatches" \
+            -f event_type=upstream-agent-core-changed
