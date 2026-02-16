@@ -744,10 +744,23 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     return false;
   }
 
+  private static readonly NON_TASK_TOOLS = new Set([
+    'discard',
+    'todowrite',
+    'complete_task',
+    'AskUserQuestion',
+    'report_checkpoint',
+    'report_thought',
+    'request_file_permission',
+  ]);
+
   private isNonTaskContinuationTool(toolName: string): boolean {
-    return toolName === 'skill' || toolName.endsWith('_skill') ||
-           toolName === 'discard' ||
-           this.isStartTaskTool(toolName);
+    if (toolName === 'skill' || toolName.endsWith('_skill')) { return true; }
+    if (this.isStartTaskTool(toolName)) { return true; }
+    for (const tool of OpenCodeAdapter.NON_TASK_TOOLS) {
+      if (toolName === tool || toolName.endsWith(`_${tool}`)) { return true; }
+    }
+    return false;
   }
 
   private emitPlanMessage(input: StartTaskInput, sessionId: string): void {

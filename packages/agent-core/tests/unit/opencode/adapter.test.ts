@@ -438,6 +438,66 @@ describe('markToolsUsed with continuation classification', () => {
   });
 });
 
+describe('Non-task tools should not trigger continuation', () => {
+  // These tools are system/lifecycle tools that should be passed as
+  // markToolsUsed(false) by the adapter. If only these tools are called,
+  // the turn should still complete as conversational.
+  const nonTaskTools = [
+    'skill', 'my_prefix_skill',
+    'start_task', 'mcp_start_task',
+    'discard',
+    'todowrite', 'mcp_todowrite',
+    'complete_task', 'mcp_complete_task',
+    'AskUserQuestion', 'mcp_AskUserQuestion',
+    'report_checkpoint', 'mcp_report_checkpoint',
+    'report_thought', 'mcp_report_thought',
+    'request_file_permission', 'mcp_request_file_permission',
+  ];
+
+  let enforcer: CompletionEnforcer;
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    enforcer = new CompletionEnforcer({
+      onStartContinuation: vi.fn().mockResolvedValue(undefined),
+      onComplete: vi.fn(),
+      onDebug: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(nonTaskTools)(
+    '%s does not count as task work',
+    () => {
+      // All non-task tools should be passed as markToolsUsed(false)
+      enforcer.markToolsUsed(false);
+      const action = enforcer.handleStepFinish('stop');
+      expect(action).toBe('complete');
+    }
+  );
+
+  it('only non-task tools used still completes as conversational', () => {
+    // Simulate multiple non-task tool calls
+    enforcer.markToolsUsed(false);
+    enforcer.markToolsUsed(false);
+    enforcer.markToolsUsed(false);
+    const action = enforcer.handleStepFinish('stop');
+    expect(action).toBe('complete');
+  });
+
+  it('a single real tool among non-task tools triggers continuation', () => {
+    enforcer.markToolsUsed(false); // non-task
+    enforcer.markToolsUsed(true);  // real tool (e.g., bash)
+    enforcer.markToolsUsed(false); // non-task
+    const action = enforcer.handleStepFinish('stop');
+    expect(action).toBe('pending');
+  });
+});
+
 describe('Integration flow: conversational turn', () => {
   let enforcer: CompletionEnforcer;
 
