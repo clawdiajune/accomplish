@@ -1,4 +1,4 @@
-export { generateTaskSummary, type GetApiKeyFn } from './summarizer.js';
+export { generateTaskSummary, compactConversation, type GetApiKeyFn } from './summarizer.js';
 export {
   SpeechService,
   createSpeechService,

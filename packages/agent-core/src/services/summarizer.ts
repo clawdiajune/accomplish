@@ -209,6 +209,86 @@ function cleanSummary(text: string): string {
   );
 }
 
+const COMPACTION_SYSTEM_PROMPT = `Summarize this computer-use agent conversation for session continuation.
+Preserve EXACTLY:
+
+1. GOAL: The original user task, verbatim
+2. PROGRESS: Steps completed and their outcomes (success/failure)
+3. BROWSER STATE: Current URL, logged-in status, page context
+4. WORKSPACE STATE: Files created/modified, data extracted, downloads
+5. FAILED ATTEMPTS: Actions that didn't work and why (prevent retrying)
+6. REMAINING WORK: Pending steps or todos not yet started
+7. KEY DECISIONS: Any choices made during execution that affect next steps
+
+Be factual and specific. Include exact URLs, filenames, field values,
+and error messages. Do NOT summarize subjectively -- the next agent
+session must be able to continue the task without re-exploring.`;
+
+/**
+ * Compress a conversation history into a condensed summary for session continuation.
+ * Uses Haiku for speed and cost efficiency.
+ *
+ * Returns the summary string, or null if compaction fails (caller should
+ * fall back to surfacing the original error).
+ */
+export async function compactConversation(
+  messages: Array<{ role: string; content: string }>,
+  getApiKey: GetApiKeyFn,
+): Promise<string | null> {
+  try {
+    const apiKey = getApiKey('anthropic');
+    if (!apiKey) {
+      console.warn('[Summarizer] No Anthropic API key available for compaction.');
+      return null;
+    }
+
+    // Format conversation as a single user message for summarization
+    const conversationText = messages
+      .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
+      .join('\n\n');
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-haiku-latest',
+        max_tokens: 4096,
+        system: COMPACTION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: `Here is the conversation to summarize:\n\n${conversationText}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[Summarizer] Compaction API call failed: ${response.status}`);
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+    const text = data?.content?.[0]?.text;
+    if (!text) {
+      console.warn('[Summarizer] Compaction returned empty response.');
+      return null;
+    }
+
+    console.log(`[Summarizer] Conversation compacted successfully (${text.length} chars).`);
+    return text;
+  } catch (error) {
+    console.warn('[Summarizer] Compaction failed:', error);
+    return null;
+  }
+}
+
 /**
  * Fallback: truncate prompt to a reasonable length
  */

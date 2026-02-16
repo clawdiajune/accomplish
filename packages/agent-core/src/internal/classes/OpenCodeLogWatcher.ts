@@ -14,6 +14,8 @@ export interface OpenCodeLogError {
   message?: string;
   raw: string;
   isAuthError?: boolean;
+  currentTokens?: number;
+  maxTokens?: number;
 }
 
 const ERROR_PATTERNS: Array<{
@@ -88,6 +90,16 @@ const ERROR_PATTERNS: Array<{
       errorName: 'ModelNotFoundError',
       statusCode: 404,
       message: 'The requested model was not found or is not available in your region.',
+    }),
+  },
+  {
+    pattern: /prompt is too long: (\d+) tokens > (\d+) maximum/,
+    extract: (match) => ({
+      errorName: 'ContextOverflow',
+      statusCode: 400,
+      message: `Context overflow: ${match[1]} tokens exceeded ${match[2]} token limit.`,
+      currentTokens: parseInt(match[1]!, 10),
+      maxTokens: parseInt(match[2]!, 10),
     }),
   },
   {
@@ -272,6 +284,8 @@ export class OpenCodeLogWatcher extends EventEmitter<LogWatcherEvents> {
           statusCode: errorInfo.statusCode,
           message: errorInfo.message,
           raw: line,
+          ...('currentTokens' in errorInfo && { currentTokens: errorInfo.currentTokens }),
+          ...('maxTokens' in errorInfo && { maxTokens: errorInfo.maxTokens }),
         };
 
         console.log('[LogWatcher] Detected error:', error.errorName, error.message);
@@ -293,6 +307,8 @@ export class OpenCodeLogWatcher extends EventEmitter<LogWatcherEvents> {
         return 'Authentication failed. Please check your API credentials in Settings.';
       case 'ModelNotFoundError':
         return `Model not available: ${error.modelID || 'unknown'}. Please select a different model.`;
+      case 'ContextOverflow':
+        return error.message || 'Context window exceeded. The conversation is too long.';
       case 'ValidationError':
         return `Invalid request: ${error.message}`;
       case 'AI_APICallError':

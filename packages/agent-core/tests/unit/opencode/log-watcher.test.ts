@@ -263,6 +263,58 @@ describe('OpenCodeLogWatcher', () => {
     });
   });
 
+  describe('context-overflow detection', () => {
+    it('should emit error with ContextOverflow details when prompt too long', async () => {
+      // Create a log file inside the log directory
+      const logFile = path.join(logDir, 'test.log');
+      fs.writeFileSync(logFile, '');
+
+      watcher = new OpenCodeLogWatcher(logDir);
+      const errors: OpenCodeLogError[] = [];
+      watcher.on('error', (error) => errors.push(error));
+      await watcher.start();
+
+      // The line must contain "ERROR" (uppercase) to pass the parseLine guard,
+      // and must match the context-overflow pattern
+      const errorLog =
+        'ERROR service=opencode "name":"APIError" prompt is too long: 211840 tokens > 200000 maximum statusCode=400';
+      fs.appendFileSync(logFile, errorLog + '\n');
+
+      // Wait for polling to pick it up
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      expect(errors.length).toBeGreaterThanOrEqual(1);
+      const overflow = errors.find((e) => e.errorName === 'ContextOverflow');
+      expect(overflow).toBeDefined();
+      expect(overflow!.statusCode).toBe(400);
+      expect(overflow!.message).toContain('211840');
+      expect(overflow!.currentTokens).toBe(211840);
+      expect(overflow!.maxTokens).toBe(200000);
+    });
+
+    it('should detect context overflow before ValidationException pattern', async () => {
+      // Verify that the ContextOverflow pattern takes priority over ValidationException
+      const logFile = path.join(logDir, 'test.log');
+      fs.writeFileSync(logFile, '');
+
+      watcher = new OpenCodeLogWatcher(logDir);
+      const errors: OpenCodeLogError[] = [];
+      watcher.on('error', (error) => errors.push(error));
+      await watcher.start();
+
+      // A line that could match both ValidationException and ContextOverflow
+      const errorLog =
+        'ERROR service=opencode ValidationException "message":"prompt is too long: 150000 tokens > 128000 maximum"';
+      fs.appendFileSync(logFile, errorLog + '\n');
+
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      expect(errors.length).toBeGreaterThanOrEqual(1);
+      // Should match ContextOverflow, NOT ValidationError
+      expect(errors[0]!.errorName).toBe('ContextOverflow');
+    });
+  });
+
   describe('createLogWatcher', () => {
     it('should create a new log watcher instance', () => {
       const newWatcher = createLogWatcher(logDir);

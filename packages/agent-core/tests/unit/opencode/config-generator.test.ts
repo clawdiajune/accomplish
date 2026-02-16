@@ -423,6 +423,39 @@ describe('ConfigGenerator', () => {
     });
   });
 
+  describe('systemPromptAppend support', () => {
+    it('should accept systemPromptAppend on TaskConfig for session continuation', () => {
+      // TaskConfig already has systemPromptAppend as an optional field.
+      // This test verifies the field exists and can carry continuation context.
+      // The adapter uses this field to prepend recovery summaries to prompts.
+      const taskConfig: import('../../../src/common/types/task.js').TaskConfig = {
+        prompt: 'Continue the task',
+        systemPromptAppend: `## Session Continuation Context
+This is a continuation of a previous session that exceeded the context limit.
+
+<prior-session-summary>
+GOAL: Navigate to example.com
+PROGRESS: Logged in successfully.
+</prior-session-summary>
+
+Resume the task from where the prior session left off. Do NOT repeat completed steps.`,
+      };
+
+      expect(taskConfig.systemPromptAppend).toBeDefined();
+      expect(taskConfig.systemPromptAppend).toContain('Session Continuation Context');
+      expect(taskConfig.systemPromptAppend).toContain('Navigate to example.com');
+      expect(taskConfig.systemPromptAppend).toContain('Do NOT repeat');
+    });
+
+    it('should allow TaskConfig without systemPromptAppend', () => {
+      const taskConfig: import('../../../src/common/types/task.js').TaskConfig = {
+        prompt: 'Normal task',
+      };
+
+      expect(taskConfig.systemPromptAppend).toBeUndefined();
+    });
+  });
+
   describe('system prompt content', () => {
     it('should include identity section', () => {
       const options: ConfigGeneratorOptions = {

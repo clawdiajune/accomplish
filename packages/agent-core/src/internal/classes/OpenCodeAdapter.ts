@@ -11,6 +11,28 @@ import type { OpenCodeMessage } from '../../common/types/opencode.js';
 import type { PermissionRequest } from '../../common/types/permission.js';
 import type { TodoItem } from '../../common/types/todo.js';
 import { serializeError } from '../../utils/error.js';
+import { compactConversation } from '../../services/summarizer.js';
+import type { GetApiKeyFn } from '../../services/summarizer.js';
+
+/**
+ * Build a prompt with prior session context prepended for recovery after context overflow.
+ * The continuation block instructs the agent to resume from where the prior session left off.
+ */
+export function buildContinuationPrompt(originalPrompt: string, summary: string): string {
+  return `## Session Continuation Context
+This is a continuation of a previous session that exceeded the context limit.
+Here is the state from the prior session:
+
+<prior-session-summary>
+${summary}
+</prior-session-summary>
+
+Resume the task from where the prior session left off. Do NOT repeat completed steps. Start with the next pending action.
+
+---
+
+${originalPrompt}`;
+}
 
 export class OpenCodeCliNotFoundError extends Error {
   constructor() {
@@ -30,6 +52,8 @@ export interface AdapterOptions {
   buildCliArgs: (config: TaskConfig) => Promise<string[]>;
   onBeforeStart?: () => Promise<void>;
   getModelDisplayName?: (modelId: string) => string;
+  /** Provides API keys for LLM providers. Required for context overflow recovery. */
+  getApiKey?: GetApiKeyFn;
 }
 
 export interface OpenCodeAdapterEvents {
@@ -62,6 +86,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   private hasReceivedFirstTool: boolean = false;
   private startTaskCalled: boolean = false;
   private options: AdapterOptions;
+  private isRetryAttempt: boolean = false;
+  private lastTaskConfig: TaskConfig | null = null;
 
   constructor(options: AdapterOptions, taskId?: string) {
     super();
@@ -98,6 +124,15 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.logWatcher.on('error', (error: OpenCodeLogError) => {
       if (!this.hasCompleted && this.ptyProcess) {
         console.log('[OpenCode Adapter] Log watcher detected error:', error.errorName);
+
+        // Intercept context overflow for recovery before surfacing to user
+        if (error.errorName === 'ContextOverflow') {
+          this.handleContextOverflow(error).catch((recoveryError) => {
+            console.warn('[OpenCode Adapter] Recovery failed unexpectedly:', recoveryError);
+            this.surfaceError(error);
+          });
+          return;
+        }
 
         const errorMessage = OpenCodeLogWatcher.getErrorMessage(error);
 
@@ -144,6 +179,9 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     if (this.isDisposed) {
       throw new Error('Adapter has been disposed and cannot start new tasks');
     }
+
+    // Store config for potential recovery retry
+    this.lastTaskConfig = config;
 
     const taskId = config.taskId || this.generateTaskId();
     this.currentTaskId = taskId;
@@ -353,6 +391,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.currentModelId = null;
     this.hasReceivedFirstTool = false;
     this.startTaskCalled = false;
+    this.isRetryAttempt = false;
+    this.lastTaskConfig = null;
 
     if (this.waitingTransitionTimer) {
       clearTimeout(this.waitingTransitionTimer);
@@ -363,6 +403,113 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     this.removeAllListeners();
 
     console.log('[OpenCode Adapter] Adapter disposed');
+  }
+
+  /**
+   * Handle context overflow by compacting the conversation and retrying
+   * in a new CLI session. Surfaces the error on second failure or if
+   * compaction is unavailable.
+   */
+  private async handleContextOverflow(error: OpenCodeLogError): Promise<void> {
+    // If this is already a retry, give up and surface the error
+    if (this.isRetryAttempt) {
+      console.warn('[OpenCode Adapter] Context overflow on retry attempt — surfacing error.');
+      this.surfaceError(error);
+      return;
+    }
+
+    // Check that getApiKey is available for compaction
+    if (!this.options.getApiKey) {
+      console.warn('[OpenCode Adapter] No getApiKey available — cannot compact conversation.');
+      this.surfaceError(error);
+      return;
+    }
+
+    console.log(
+      `[OpenCode Adapter] Context overflow detected (${error.currentTokens} / ${error.maxTokens} tokens). Attempting recovery...`
+    );
+
+    // Kill the current PTY process
+    if (this.ptyProcess) {
+      try {
+        this.ptyProcess.kill();
+      } catch (err) {
+        console.warn('[OpenCode Adapter] Error killing PTY for recovery:', err);
+      }
+      this.ptyProcess = null;
+    }
+
+    // Convert TaskMessage[] to the format compactConversation expects
+    const conversationMessages = this.messages.map((m) => ({
+      role: m.type === 'assistant' ? 'assistant' : 'user',
+      content: m.content,
+    }));
+
+    const summary = await compactConversation(conversationMessages, this.options.getApiKey);
+    if (!summary) {
+      console.warn('[OpenCode Adapter] Compaction failed — surfacing original error.');
+      this.surfaceError(error);
+      return;
+    }
+
+    console.log('[OpenCode Adapter] Conversation compacted. Spawning retry session...');
+
+    // Build continuation config and retry
+    this.isRetryAttempt = true;
+
+    if (!this.lastTaskConfig) {
+      console.warn('[OpenCode Adapter] No task config available for retry.');
+      this.surfaceError(error);
+      return;
+    }
+
+    const continuationPrompt = buildContinuationPrompt(this.lastTaskConfig.prompt, summary);
+
+    try {
+      await this.startTask({
+        ...this.lastTaskConfig,
+        prompt: continuationPrompt,
+        // Don't reuse the old session — start fresh
+        sessionId: undefined,
+      });
+    } catch (retryError) {
+      console.warn('[OpenCode Adapter] Retry session failed:', retryError);
+      this.surfaceError(error);
+    }
+  }
+
+  /**
+   * Surface a log-watcher error to the user as a completion error.
+   * Extracted to avoid duplicating the error emission logic.
+   */
+  private surfaceError(error: OpenCodeLogError): void {
+    const errorMessage = OpenCodeLogWatcher.getErrorMessage(error);
+
+    this.emit('debug', {
+      type: 'error',
+      message: `[${error.errorName}] ${errorMessage}`,
+      data: {
+        errorName: error.errorName,
+        statusCode: error.statusCode,
+        message: error.message,
+      },
+    });
+
+    this.hasCompleted = true;
+    this.emit('complete', {
+      status: 'error',
+      sessionId: this.currentSessionId || undefined,
+      error: errorMessage,
+    });
+
+    if (this.ptyProcess) {
+      try {
+        this.ptyProcess.kill();
+      } catch (err) {
+        console.warn('[OpenCode Adapter] Error killing PTY after error:', err);
+      }
+      this.ptyProcess = null;
+    }
   }
 
   private escapeShellArg(arg: string): string {
