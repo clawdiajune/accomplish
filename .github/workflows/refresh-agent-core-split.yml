@@ -6,6 +6,10 @@ on:
     paths: ["packages/agent-core/**"]
   workflow_dispatch:
 
+concurrency:
+  group: refresh-agent-core-split
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -22,13 +26,27 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin agent-core-split || true
 
           if git rev-parse --verify agent-core-split >/dev/null 2>&1; then
             git branch -D agent-core-split
           fi
 
           git subtree split --prefix=packages/agent-core -b agent-core-split
-          git push origin agent-core-split --force-with-lease
+
+          for attempt in 1 2 3; do
+            if git push origin agent-core-split --force-with-lease; then
+              exit 0
+            fi
+
+            if [ "${attempt}" -eq 3 ]; then
+              echo "ERROR: failed to push agent-core-split after 3 attempts."
+              exit 1
+            fi
+
+            echo "Lease mismatch on push (attempt ${attempt}). Refetching and retrying..."
+            git fetch origin agent-core-split
+          done
 
       - name: Notify downstream
         env:
