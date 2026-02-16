@@ -740,7 +740,7 @@ describe('ConfigGenerator', () => {
         mcpToolsPath,
         userDataPath,
         isPackaged: false,
-        skills: [{ name: 'test-skill', command: '/test', description: 'A test skill', path: '/tmp/skill' }],
+        skills: [{ name: 'test-skill', command: '/test', description: 'A test skill', filePath: '/tmp/skill' }],
       });
       expect(result.systemPrompt).toContain('available-skills');
       expect(result.systemPrompt).toContain('test-skill');

@@ -135,7 +135,7 @@ You MUST call start_task before any other tool. This is enforced - other tools w
 **Decide: Does this request need planning?**
 
 Set \`needs_planning: true\` if completing the request will require tools beyond start_task and complete_task (e.g., file operations, browser actions, bash commands).
-Set \`needs_planning: false\` if you can answer from knowledge alone using only start_task → text response → complete_task. This includes greetings, knowledge questions, meta-questions about your capabilities, help requests, and conversational messages.
+Set \`needs_planning: false\` if you can answer from knowledge alone using only start_task → text response → stop. This includes greetings, knowledge questions, meta-questions about your capabilities, help requests, and conversational messages.
 
 **When needs_planning is TRUE** — provide goal, steps, verification:
 

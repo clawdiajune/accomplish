@@ -755,7 +755,8 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
   }
 
   private isNonTaskContinuationTool(toolName: string): boolean {
-    return toolName === 'skill' || toolName.endsWith('_skill');
+    return toolName === 'skill' || toolName.endsWith('_skill') ||
+           this.isStartTaskTool(toolName);
   }
 
   private emitPlanMessage(input: StartTaskInput, sessionId: string): void {
