@@ -76,10 +76,12 @@ process.env.APP_ROOT = path.join(__dirname, '../..');
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron');
 
 // In dev mode, web's Vite dev server runs on localhost:5173.
-const ROUTER_URL = process.env.ACCOMPLISH_ROUTER_URL || 'http://localhost:5173';
+const WEB_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 
-// In production, web's build output is copied into dist/ during the build step.
-export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist');
+// In production, web's build output is packaged as an extraResource.
+const WEB_DIST = app.isPackaged
+  ? path.join(process.resourcesPath, 'web-ui')
+  : path.join(process.env.APP_ROOT, '../web/dist/client');
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -161,10 +163,10 @@ function createWindow() {
   }
 
   if (!app.isPackaged) {
-    console.log('[Main] Loading from web dev server:', ROUTER_URL);
-    mainWindow.loadURL(ROUTER_URL);
+    console.log('[Main] Loading from web dev server:', WEB_DEV_SERVER_URL);
+    mainWindow.loadURL(WEB_DEV_SERVER_URL);
   } else {
-    const indexPath = path.join(RENDERER_DIST, 'index.html');
+    const indexPath = path.join(WEB_DIST, 'index.html');
     console.log('[Main] Loading from file:', indexPath);
     mainWindow.loadFile(indexPath);
   }

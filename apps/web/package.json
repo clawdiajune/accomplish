@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.client.json --noEmit",
     "lint": "tsc -p tsconfig.client.json --noEmit",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.unit.config.ts && vitest run --config vitest.integration.config.ts",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest watch"
