@@ -284,8 +284,8 @@ export class OpenCodeLogWatcher extends EventEmitter<LogWatcherEvents> {
           statusCode: errorInfo.statusCode,
           message: errorInfo.message,
           raw: line,
-          ...('currentTokens' in errorInfo && { currentTokens: errorInfo.currentTokens }),
-          ...('maxTokens' in errorInfo && { maxTokens: errorInfo.maxTokens }),
+          currentTokens: 'currentTokens' in errorInfo ? (errorInfo as { currentTokens: number }).currentTokens : undefined,
+          maxTokens: 'maxTokens' in errorInfo ? (errorInfo as { maxTokens: number }).maxTokens : undefined,
         };
 
         console.log('[LogWatcher] Detected error:', error.errorName, error.message);

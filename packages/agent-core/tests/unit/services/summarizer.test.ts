@@ -2,24 +2,30 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { compactConversation } from '../../../src/services/summarizer.js';
 
 describe('compactConversation', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Use vi.stubGlobal for consistent mock setup and teardown
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('should return a summary string when given conversation messages', async () => {
     // Mock fetch to simulate Anthropic API response
-    const mockResponse = {
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         content: [{ type: 'text', text: 'GOAL: Navigate to example.com\nPROGRESS: Completed login step.' }],
       }),
-    };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    });
 
     // GetApiKeyFn is synchronous — returns string | null, not a Promise
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
@@ -36,7 +42,7 @@ describe('compactConversation', () => {
     expect(summary!.length).toBeGreaterThan(0);
 
     // Verify fetch was called with Anthropic endpoint
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       'https://api.anthropic.com/v1/messages',
       expect.objectContaining({ method: 'POST' }),
     );
@@ -51,7 +57,7 @@ describe('compactConversation', () => {
   });
 
   it('should return null when API call fails', async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    fetchMock.mockRejectedValue(new Error('Network error'));
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
     const messages = [{ role: 'user', content: 'test' }];
 
@@ -60,11 +66,10 @@ describe('compactConversation', () => {
   });
 
   it('should return null when API returns non-ok response', async () => {
-    const mockResponse = {
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
-    };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    });
 
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
     const messages = [{ role: 'user', content: 'test' }];
@@ -74,11 +79,10 @@ describe('compactConversation', () => {
   });
 
   it('should return null when API returns empty content', async () => {
-    const mockResponse = {
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ content: [] }),
-    };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    });
 
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
     const messages = [{ role: 'user', content: 'test' }];
@@ -89,13 +93,12 @@ describe('compactConversation', () => {
 
   it('should return null when API response content has no text field', async () => {
     // Simulates an unexpected response shape — e.g., image-only content block
-    const mockResponse = {
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         content: [{ type: 'image', source: { data: 'base64...' } }],
       }),
-    };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    });
 
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
     const messages = [{ role: 'user', content: 'test' }];
@@ -106,13 +109,12 @@ describe('compactConversation', () => {
 
   it('should format conversation messages as [ROLE]: content in the API request body', async () => {
     // Verify the actual payload sent to the Anthropic API includes formatted conversation
-    const mockResponse = {
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         content: [{ type: 'text', text: 'Summary' }],
       }),
-    };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    });
 
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
     const messages = [
@@ -124,7 +126,7 @@ describe('compactConversation', () => {
     await compactConversation(messages, getApiKey);
 
     // Extract the body from the fetch call
-    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const fetchCall = fetchMock.mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
     const userMessage = body.messages[0].content;
 
@@ -144,18 +146,17 @@ describe('compactConversation', () => {
   });
 
   it('should use haiku model and compaction system prompt', async () => {
-    const mockResponse = {
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         content: [{ type: 'text', text: 'Summary' }],
       }),
-    };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    });
 
     const getApiKey = vi.fn().mockReturnValue('test-api-key');
     await compactConversation([{ role: 'user', content: 'test' }], getApiKey);
 
-    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const fetchCall = fetchMock.mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
 
     expect(body.model).toBe('claude-3-5-haiku-latest');

@@ -439,9 +439,10 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       this.ptyProcess = null;
     }
 
-    // Convert TaskMessage[] to the format compactConversation expects
+    // Convert TaskMessage[] to the format compactConversation expects.
+    // Preserve tool/system types so the summarizer has full semantic context.
     const conversationMessages = this.messages.map((m) => ({
-      role: m.type === 'assistant' ? 'assistant' : 'user',
+      role: m.type === 'assistant' ? 'assistant' : m.type === 'tool' ? 'tool' : 'user',
       content: m.content,
     }));
 
@@ -491,9 +492,18 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
       data: {
         errorName: error.errorName,
         statusCode: error.statusCode,
+        providerID: error.providerID,
+        modelID: error.modelID,
         message: error.message,
       },
     });
+
+    if (error.isAuthError && error.providerID) {
+      this.emit('auth-error', {
+        providerId: error.providerID,
+        message: errorMessage,
+      });
+    }
 
     this.hasCompleted = true;
     this.emit('complete', {
