@@ -854,7 +854,12 @@ export class OpenCodeAdapter extends EventEmitter<OpenCodeAdapterEvents> {
     const shell =
       this.options.isPackaged && this.options.platform === 'darwin'
         ? '/bin/sh'
-        : process.env.SHELL || (fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh');
+        : process.env.SHELL ||
+          (fs.existsSync('/bin/bash')
+            ? '/bin/bash'
+            : fs.existsSync('/bin/zsh')
+              ? '/bin/zsh'
+              : '/bin/sh');
 
     const fullCommand = this.buildShellCommand(command, args);
     return { file: shell, args: ['-c', fullCommand] };
